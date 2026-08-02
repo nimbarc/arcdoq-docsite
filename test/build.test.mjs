@@ -460,8 +460,12 @@ describe('legal corpora that used to break the build', () => {
 // own `area:` frontmatter. docs.config.example.json teaches the hyphenated
 // directory spelling, so for any multi-word area the warrant lookup could never
 // hit — the nav showed the declared label and the warrant showed the raw folder
-// name, in a build that reported nothing wrong. These are the tests for one key
-// space and for the warning that makes an unused key loud.
+// name, in a build that reported nothing wrong.
+//
+// The shared config below declares the FRONTMATTER spelling over hyphenated
+// directories, deliberately. Declaring the directory spelling makes the two nav
+// lookups exact-match hits that never exercise the canonicalisation at all, and
+// both of them silently revert to `config.areaLabels[dir]` with the suite green.
 describe('area labels', () => {
   const LABEL = 'Auth and organisations'
   const files = {
@@ -482,72 +486,160 @@ describe('area labels', () => {
     'rules/user-mgmt/index.md': '---\narea: User Mgmt\n---\n\n# UserMgmt\n\nStub.\n',
   }
   const config = { areaLabels: {
-    'auth-organizations': LABEL, 'user-mgmt': 'Users and teams',
+    AuthOrganizations: LABEL, 'User Mgmt': 'Users and teams',
   } }
+  const warrantOf = (html) => /<div class="page-warrant">[\s\S]*?<\/div>/.exec(html)[0]
+  const navOf = (html) => /<nav class="side"[\s\S]*?<\/nav>/.exec(html)[0]
 
-  test('the directory spelling declared in config also labels the page warrant', () => {
+  test('the frontmatter spelling declared in config also labels the ledger row', () => {
     const r = adHoc(files, { config })
     const html = r.read('rules-auth-organizations-index.html')
-    const warrant = /<div class="page-warrant">[\s\S]*?<\/div>/.exec(html)[0]
-    assert.ok(warrant.includes(LABEL), 'the declared label, not the folder name')
-    assert.ok(!warrant.includes('AuthOrganizations'),
+    assert.ok(navOf(html).includes(`>${LABEL}</a>`), 'the ledger keys on the directory')
+    assert.ok(warrantOf(html).includes(LABEL))
+    assert.ok(!warrantOf(html).includes('AuthOrganizations'),
       'the raw name is the exact thing areaLabels exists to suppress')
   })
 
   test('the ledger row and the warrant on one page cannot disagree', () => {
     const r = adHoc(files, { config })
     const html = r.read('rules-auth-organizations-index.html')
-    const nav = /<nav class="side"[\s\S]*?<\/nav>/.exec(html)[0]
-    assert.ok(nav.includes(`>${LABEL}</a>`), 'the ledger row names the area')
     assert.equal((html.match(new RegExp(LABEL, 'g')) || []).length, 2,
       'once in the nav and once in the warrant, from one declared entry')
   })
 
   test('a space, a hyphen and a capital are the same area', () => {
     const r = adHoc(files, { config })
-    // `user-mgmt` declared, `User Mgmt` written in frontmatter, `user-mgmt` the
-    // directory: three spellings, one entry, no duplicate keys required.
+    // `User Mgmt` declared, `User Mgmt` in frontmatter, `user-mgmt` the
+    // directory: the nav-label path must canonicalise to reach the entry.
     const html = r.read('rules-user-mgmt-index.html')
-    const warrant = /<div class="page-warrant">[\s\S]*?<\/div>/.exec(html)[0]
-    assert.ok(warrant.includes('Users and teams'))
-    const nav = /<nav class="side"[\s\S]*?<\/nav>/.exec(html)[0]
-    assert.ok(nav.includes('>Users and teams</a>'))
+    assert.ok(warrantOf(html).includes('Users and teams'))
+    assert.ok(navOf(html).includes('>Users and teams</a>'), 'the nav-label path canonicalises')
     assert.deepEqual(r.warnings, [], 'nothing here is unresolved')
   })
 
-  test('a declared key that resolves nothing is named, so --strict can fail on it', () => {
-    // The silent half of the same defect: the key is spelt one way in config
-    // and another way in the corpus, so every page of that area renders the raw
-    // name and the build still reports success.
+  test('digits are part of the key, so v1 and v2 are two areas', () => {
+    // docs.config.example.json ships `billing-v2`, so the digit class is the
+    // documented case. Strip digits and both keys collapse to one entry and
+    // every page of one area takes the other's label.
+    const r = adHoc({
+      'docs.json': docsJson(['rules/billing-v1/index', 'rules/billing-v2/index']),
+      'rules/billing-v1/index.md': '---\narea: billing-v1\n---\n\n# One\n\nBody.\n',
+      'rules/billing-v2/index.md': '---\narea: billing-v2\n---\n\n# Two\n\nBody.\n',
+    }, { config: { areaLabels: { 'billing-v1': 'Billing (legacy)', 'billing-v2': 'Billing' } } })
+    assert.deepEqual(r.warnings, [])
+    assert.ok(warrantOf(r.read('rules-billing-v1-index.html')).includes('Billing (legacy)'))
+    const two = warrantOf(r.read('rules-billing-v2-index.html'))
+    assert.ok(two.includes('Billing') && !two.includes('legacy'))
+  })
+
+  test('a Latin diacritic folds, so an ASCII directory finds an accented area', () => {
+    const r = adHoc({
+      'docs.json': docsJson(['rules/uberweisungen/index']),
+      'rules/uberweisungen/index.md': '---\narea: Überweisungen\n---\n\n# U\n\nBody.\n',
+    }, { config: { areaLabels: { uberweisungen: 'Transfers' } } })
+    assert.deepEqual(r.warnings, [])
+    assert.ok(warrantOf(r.read('rules-uberweisungen-index.html')).includes('Transfers'))
+  })
+
+  test('a combining mark outside the Latin block is a letter, not decoration', () => {
+    // NFKD splits ガ into カ + ゙. Stripping the whole \p{M} class then makes
+    // ガード (guard) and カード (card) the same area, and one takes the other's label.
+    const r = adHoc({
+      'docs.json': docsJson(['rules/guard/index', 'rules/card/index']),
+      'rules/guard/index.md': '---\narea: ガード\n---\n\n# G\n\nBody.\n',
+      'rules/card/index.md': '---\narea: カード\n---\n\n# C\n\nBody.\n',
+    }, { config: { areaLabels: { 'ガード': 'Guard rails', 'カード': 'Payment cards' } } })
+    assert.deepEqual(r.warnings, [], 'two distinct areas, not one duplicate')
+    assert.ok(warrantOf(r.read('rules-guard-index.html')).includes('Guard rails'))
+    assert.ok(warrantOf(r.read('rules-card-index.html')).includes('Payment cards'))
+  })
+
+  test('an area that matches no key renders its raw name, never nothing', () => {
+    // Both `|| raw` fallbacks: the warrant's `|| page.data.area` and the
+    // ledger's `|| dir`. areaLabel returns null rather than the input so that
+    // each site can keep its own, and dropping either empties the slot.
+    const r = adHoc({
+      'docs.json': docsJson(['rules/billing/index']),
+      'rules/billing/index.md': '---\narea: Billing Ops\n---\n\n# B\n\nBody.\n',
+    }, { config: { areaLabels: {} } })
+    assert.deepEqual(r.warnings, [])
+    assert.ok(warrantOf(r.read('rules-billing-index.html')).includes('Billing Ops'))
+    assert.ok(navOf(r.read('rules-billing-index.html')).includes('>billing</a>'))
+  })
+
+  test('a key with no letters or digits still matches the directory it names', () => {
+    // '_' canonicalises to '', and so does a page with no `area:` at all, so it
+    // cannot go in the shared key space. It stays reachable by the exact string
+    // it was declared under, which is all the pre-canonical lookup matched it
+    // by — dropping it regressed a config that used to render correctly.
+    const r = adHoc({
+      'docs.json': docsJson(['rules/_/index', 'rules/orders/index']),
+      'rules/_/index.md': '# Scratch\n\nNo frontmatter at all.\n',
+      'rules/orders/index.md': '# Orders\n\nAlso no frontmatter.\n',
+    }, { config: { areaLabels: { _: 'Scratch space' } } })
+    assert.deepEqual(r.warnings, [])
+    const html = r.read('rules-_-index.html')
+    assert.ok(navOf(html).includes('>Scratch space</a>'))
+    // The empty key must not answer for a page that simply has no area.
+    assert.ok(!warrantOf(r.read('rules-orders-index.html')).includes('Scratch space'))
+  })
+
+  test('two spellings carrying one label are the old workaround, not an error', () => {
+    // Before the key spaces were joined, declaring both spellings was the ONLY
+    // way to get a correct site. Those configs render identically now, so
+    // failing their build over a redundant key breaks the one group of
+    // consumers who had it right.
+    const r = adHoc(files, { config: { areaLabels: {
+      AuthOrganizations: LABEL, 'auth-organizations': LABEL, 'User Mgmt': 'Users and teams',
+    } } })
+    assert.deepEqual(r.warnings, [])
+    assert.ok(warrantOf(r.read('rules-auth-organizations-index.html')).includes(LABEL))
+  })
+
+  test('two spellings carrying different labels are named, and the first wins', () => {
+    const r = adHoc(files, { config: { areaLabels: {
+      AuthOrganizations: 'First', 'auth-organizations': 'Second', 'User Mgmt': 'Users and teams',
+    } } })
+    assert.ok(r.warnings.some((w) =>
+      /declares both "AuthOrganizations" and "auth-organizations" for the same area with different labels/.test(w)))
+    const html = r.read('rules-auth-organizations-index.html')
+    assert.ok(html.includes('First') && !html.includes('Second'))
+  })
+
+  test('a declared key naming no published area is reported, so --strict can fail on it', () => {
     const r = adHoc(files, { config: { areaLabels: {
       ...config.areaLabels, 'billing-v2': 'Billing',
     } } })
     assert.ok(r.warnings.some((w) =>
-      /areaLabels declares "billing-v2" but no area in the corpus resolves to it/.test(w)))
-    assert.equal(r.warnings.length, 1, 'the keys that did resolve are not reported')
+      /areaLabels declares "billing-v2" but no area the corpus publishes resolves to it/.test(w)))
+    assert.ok(!r.warnings.some((w) => /"AuthOrganizations"|"User Mgmt"/.test(w)),
+      'the keys that do name a published area are not reported')
   })
 
-  test('two keys naming one area are reported, and the first declared wins', () => {
+  test('a key naming a published area is never reported, whatever reads it', () => {
+    // The sweep must measure the corpus, not which lookups fired. Two of the
+    // three read sites are conditional — the ledger only inside a group named
+    // `Rules`, the nav label only on an index.md — so a perfectly spelt key can
+    // go unconsulted, and calling that unresolved reddens a correct build.
     const r = adHoc({
-      'docs.json': docsJson(['rules/user-mgmt/index']),
-      'rules/user-mgmt/index.md': '---\narea: user-mgmt\n---\n\n# UserMgmt\n\nBody.\n',
-    }, { config: { areaLabels: { 'user-mgmt': 'First', 'User Mgmt': 'Second' } } })
+      'docs.json': JSON.stringify({ name: 'Ad hoc', navigation: { groups: [
+        { group: 'Not yet documented', pages: ['rules/billing/overview'] },
+      ] } }),
+      'rules/billing/overview.md': '# Billing\n\nNo frontmatter, no index, no Rules group.\n',
+    }, { config: { areaLabels: { billing: 'Billing and invoicing' } } })
+    assert.deepEqual(r.warnings, [], 'rules/billing/ is published and spelt exactly as declared')
+  })
+
+  test('a page whose area disagrees with its own directory is named', () => {
+    // The residual split: canonicalising joins every spelling of one word, not
+    // two different words. The directory resolves, the frontmatter does not, so
+    // the nav says one thing and the page says another.
+    const r = adHoc({
+      'docs.json': docsJson(['rules/billing/index']),
+      'rules/billing/index.md': '---\narea: Payments\n---\n\n# B\n\nBody.\n',
+    }, { config: { areaLabels: { billing: 'Billing' } } })
     assert.ok(r.warnings.some((w) =>
-      /declares both "user-mgmt" and "User Mgmt"/.test(w)))
-    assert.equal(r.warnings.length, 1, 'the loser is named once, not twice')
-    const html = r.read('rules-user-mgmt-index.html')
-    assert.ok(html.includes('First') && !html.includes('Second'))
-  })
-
-  test('a key with nothing to key on cannot become the label for every page', () => {
-    // areaKey strips separators, so a key of nothing but separators canonicalises
-    // to '' — which is also what a page with no `area:` at all canonicalises to.
-    const r = adHoc({
-      'docs.json': docsJson(['rules/orders/index']),
-      'rules/orders/index.md': '# Orders\n\nNo frontmatter at all.\n',
-    }, { config: { areaLabels: { '—': 'Everything' } } })
-    assert.ok(r.warnings.some((w) => /has no letters or digits to key on/.test(w)))
-    assert.ok(!r.read('rules-orders-index.html').includes('Everything'))
+      /declares area: "Payments", which matches no areaLabels key, while its directory "billing" does/.test(w)))
   })
 })
 

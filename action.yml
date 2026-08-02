@@ -70,6 +70,24 @@ inputs:
       live site's visibility is refused — do that in the arcdoq app, deliberately.
     required: false
     default: ''
+  publish-branch:
+    description: >-
+      Which branch may publish. Empty (the default) means the repository's default
+      branch; pass "*" to publish from every ref.
+
+      This defaults to safe because a docs repo typically runs
+      `on: [push, pull_request]`, and without it a pull request from a same-repo
+      branch would put that branch's docs into production. Pull requests from
+      FORKS are already safe by accident of the token gate — GitHub withholds
+      secrets from them, so the token arrives empty and publishing skips — but
+      same-repo branches do get secrets, and that is the common case for a docs
+      corpus where everyone is a collaborator.
+
+      Making the safe thing the default is the entire argument for publishing from
+      the action rather than from each consumer's workflow: correctness should
+      arrive by bumping a tag, not by every consumer remembering an `if:`.
+    required: false
+    default: ''
   arcdoq-endpoint:
     description: Override arcdoq's deploy endpoint. For testing; leave unset.
     required: false
@@ -125,11 +143,26 @@ runs:
         SITE: ${{ inputs.site }}
         SITE_NAME: ${{ inputs.site-name }}
         VISIBILITY: ${{ inputs.visibility }}
+        PUBLISH_BRANCH: ${{ inputs.publish-branch }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        REF_NAME: ${{ github.ref_name }}
       run: |
         set -euo pipefail
         if [ -z "${SITE}" ]; then
           echo "::error::arcdoq-token was supplied but 'site' was not. Set the slug of the arcdoq site to deploy to."
           exit 1
+        fi
+
+        # The branch gate. Checked HERE rather than in the step's `if:` so a skip
+        # can explain itself — a silently missing publish is the kind of thing
+        # someone rediscovers an hour later wondering why the docs are stale.
+        # On a pull_request event `github.ref_name` is "<n>/merge", so it never
+        # matches a branch name and PRs skip without needing a special case.
+        allowed="${PUBLISH_BRANCH:-${DEFAULT_BRANCH:-main}}"
+        if [ "${allowed}" != "*" ] && [ "${REF_NAME}" != "${allowed}" ]; then
+          echo "Skipping publish: this run is on '${REF_NAME}', and publishing is limited to '${allowed}'."
+          echo "  (Set publish-branch to another branch, or to \"*\", to change that.)"
+          exit 0
         fi
         args=(publish --site "${SITE}" --dir "${OUT_DIR}")
         if [ -n "${SITE_NAME}" ];  then args+=(--name "${SITE_NAME}"); fi

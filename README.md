@@ -47,6 +47,13 @@ sees your repo.
 the action only builds, exactly as it did before — so bumping the tag can never
 start publishing something you did not ask it to.
 
+**Only your default branch publishes.** A docs repo usually runs
+`on: [push, pull_request]`, and a pull request from a branch in the same repo
+does receive secrets — so without this, opening a PR would put that branch's
+docs into production. Runs on any other ref say so and skip. Point it elsewhere
+with `publish-branch: release`, or pass `publish-branch: "*"` if you genuinely
+want every branch to publish.
+
 **The slug is the key.** Every run deploys to the site named by `site`, so
 nothing is stored between runs and no id is ever committed back into your repo.
 The first run creates the site; every run after updates it. Renaming that site
@@ -59,6 +66,7 @@ don't, or change `site` to match.
 | `site` | — | the site's slug on arcdoq. Required when publishing |
 | `site-name` | the slug | display name, used only when the site is first created |
 | `visibility` | `public` | `public` or `private`, honoured only on create |
+| `publish-branch` | your default branch | which branch may publish; `"*"` for every ref |
 
 `visibility` applies when the site is created and is then left alone: a routine
 CI run should not be able to flip a live site's exposure. Asking for one that
@@ -134,13 +142,20 @@ Merging is shallow per top level key: overriding `areaLabels` supplies the whole
 map. Half a customer's labels and half of ours is worse than either.
 
 An `areaLabels` key is matched loosely, because the same area is spelt three
-ways across a corpus: `rules/auth-organizations/` is the directory, the nav and
-the ledger key on it, and the page's own `area:` frontmatter is whatever the
-corpus wrote there — often the source folder, `AuthOrganizations`. Case and
-separators are ignored, so one entry serves all three and no map needs the same
-area twice. A key nothing resolves to is reported as a warning, which `--strict`
-turns into a failed build: that is the shape this fails in, a site that renders
-the declared label in the nav and the raw folder name on the page.
+ways across a corpus: `rules/auth-organizations/` is the directory, which the
+nav and the ledger key on, and the page's own `area:` frontmatter is whatever
+the corpus wrote there — often the source folder, `AuthOrganizations`. Case,
+separators and Latin accents are ignored, so one declared entry serves all three
+sites and no map needs the same area twice. Declaring it twice anyway is
+harmless while both spellings carry the same label — that was the only way to
+get a correct site before the key spaces were joined. Two *different* labels for
+one area are reported, and the first declaration wins.
+
+Two warnings guard the way this shape fails, and `--strict` makes either a red
+build. A key that names no area the corpus publishes is a typo or a directory
+that was renamed. A page whose `area:` matches no key while its own directory
+does is a site that names one area two ways — the declared label in the nav, the
+raw string on the page — which is the thing the map exists to prevent.
 
 **`docs.config.json` -> `statusSidecar`** is optional and worth knowing about.
 Some corpora compute a status token that carries more than one fact: the same
