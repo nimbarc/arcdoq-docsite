@@ -158,6 +158,13 @@ declaring nothing degrades to less detail rather than a wrong answer.
 
 The fixture is invented. Nothing in this package is shaped around one corpus.
 
+## Why it renders this way
+
+[`DESIGN.md`](DESIGN.md) carries the reasoning and the rejected alternatives:
+why the metadata line splits by role, why status cannot be a ladder, why the
+minority provenance state gets the decoration, and the reflex-reject table of
+what every docs theme does and which of it was kept, reshaped or cut.
+
 ## Licence
 
 MIT.
