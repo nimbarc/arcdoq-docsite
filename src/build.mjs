@@ -105,28 +105,37 @@ const warn = (m) => { if (!warnings.includes(m)) warnings.push(m) }
 // One canonical key now serves all three sites: `auth-organizations`,
 // `AuthOrganizations` and `Auth Organizations` are the same area, and no corpus
 // has to declare a key twice to be found by both spellings.
+// `\p{M}` is KEPT. Only the Latin combining block is folded, so an ASCII
+// directory still finds an accented `area:`. Dropping the whole mark class
+// instead \u2014 which `[^\p{L}\p{N}]` does \u2014 deletes what NFKD has just separated
+// out: the dakuten that distinguishes \u30ac\u30fc\u30c9 from \u30ab\u30fc\u30c9, every Devanagari matra,
+// every Thai vowel sign. Those are letters, not decoration, and collapsing them
+// hands one area another area's label.
 const areaKey = (s) => String(s ?? '')
-  .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')   // an ASCII dir finds an accented area
-  .toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')  // case and separators carry no meaning
+  .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')      // an ASCII dir finds an accented area
+  .toLowerCase().replace(/[^\p{L}\p{N}\p{M}]/gu, '')  // case and separators carry no meaning
 
-const areaByKey = new Map()
-const areaSeen = new Set()          // declared keys that resolved, or were already named
+const areaByKey = new Map()      // canonical key -> { declared, label }
+const areaByExact = new Map()    // raw declared string, for keys with no canonical form
 for (const [declared, label] of Object.entries(config.areaLabels)) {
   const k = areaKey(declared)
-  // Nothing but punctuation collapses to the empty key, which would then be the
-  // answer for every page whose `area:` is missing or equally empty.
-  if (!k) {
-    warn(`areaLabels key "${declared}" has no letters or digits to key on`)
-    areaSeen.add(declared)
-    continue
-  }
+  // A key of nothing but separators canonicalises to '', and so does a page
+  // with no `area:` at all, so '' cannot be a shared key without labelling
+  // every unrelated page in the corpus. Such an entry stays reachable by the
+  // exact string it was declared under, which is all v0.1.0 ever matched it by.
+  if (!k) { areaByExact.set(declared, label); continue }
   const prior = areaByKey.get(k)
-  // Same precedent as the duplicate rule ID below: the first declaration wins
-  // and the clash is named, rather than resolving to whichever came last.
+  // Two spellings of one area is what the split key spaces used to REQUIRE, so
+  // the same label under both is a redundant declaration and collapsing them is
+  // provably a no-op \u2014 failing a build over it would break the only configs
+  // that were correct before this change. Two DIFFERENT labels are a real
+  // clash: one of them is being dropped. That is named, first declaration
+  // winning, on the same precedent as a rule ID declared twice.
   if (prior) {
-    warn(`areaLabels declares both "${prior.declared}" and "${declared}" for the ` +
-         `same area; "${prior.declared}" wins`)
-    areaSeen.add(declared)
+    if (prior.label !== label) {
+      warn(`areaLabels declares both "${prior.declared}" and "${declared}" for the same ` +
+           `area with different labels; "${prior.declared}" wins`)
+    }
     continue
   }
   areaByKey.set(k, { declared, label })
@@ -134,10 +143,10 @@ for (const [declared, label] of Object.entries(config.areaLabels)) {
 
 // Returns null rather than the input, so each call site keeps its own fallback.
 const areaLabel = (s) => {
-  const hit = areaByKey.get(areaKey(s))
-  if (!hit) return null
-  areaSeen.add(hit.declared)
-  return hit.label
+  const raw = String(s ?? '')
+  const k = areaKey(raw)
+  if (!k) return areaByExact.get(raw) ?? null
+  return areaByKey.get(k)?.label ?? null
 }
 
 // Claim counts are accumulated by the renderer itself, never by a second scan
@@ -1001,16 +1010,44 @@ for (const page of pages) {
   fs.writeFileSync(path.join(OUT, htmlName(page.relPath)), out)
 }
 
-// Every page has now asked for every label it wanted, so a key nothing asked
-// for is a key the corpus spells some other way — and the pages of that area
-// are rendering the raw directory or the raw frontmatter string in the slot
-// this map exists to fill. That failure is invisible in the output, so the only
-// place it can be caught is here; --strict then turns it into a red check
-// instead of a green build with the wrong name in it.
+// A declared key that names nothing is invisible in the output — the pages it
+// was meant to label render the raw name and the build reports success — so
+// here is the only place it can be caught. Both checks are measured against
+// what the corpus actually publishes.
+//
+// Counting which lookups FIRED does not measure that: two of the three read
+// sites are conditional (the ledger only inside a group literally named Rules,
+// the nav label only on a `rules/<dir>/index.md`), so a key can be spelt
+// perfectly and still never be consulted. Reporting that as unresolved turns
+// --strict red on a config that is right, which is worse than the silence.
+const publishedAreas = new Set()
+for (const rel of config.publish) {
+  const m = /^rules\/([^/]+)\//.exec(rel)
+  if (m) publishedAreas.add(areaKey(m[1]))
+}
+for (const p of pages) {
+  const k = areaKey(p.data.area)
+  if (k) publishedAreas.add(k)
+}
 for (const declared of Object.keys(config.areaLabels)) {
-  if (!areaSeen.has(declared)) {
-    warn(`areaLabels declares "${declared}" but no area in the corpus resolves to it`)
+  const k = areaKey(declared)
+  if (k && !publishedAreas.has(k)) {
+    warn(`areaLabels declares "${declared}" but no area the corpus publishes resolves to it`)
   }
+}
+
+// The residual form of the split this map was rekeyed to close: the directory
+// resolves and the page's own `area:` does not, so the nav names the area one
+// way and the page names it another. Canonicalising made the two agree for
+// every spelling of the same word; it cannot make them agree when the corpus
+// wrote two different words, and that is a corpus error worth naming rather
+// than shipping as a site that contradicts itself.
+for (const p of pages) {
+  const m = /^rules\/([^/]+)\//.exec(p.relPath)
+  if (!m || !p.data.area) continue
+  if (areaLabel(p.data.area) || !areaLabel(m[1])) continue
+  warn(`${p.relPath} declares area: "${p.data.area}", which matches no areaLabels key, ` +
+       `while its directory "${m[1]}" does — the nav and the page will disagree`)
 }
 
 // rules.json — the machine surface the MCP queries.

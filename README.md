@@ -134,13 +134,20 @@ Merging is shallow per top level key: overriding `areaLabels` supplies the whole
 map. Half a customer's labels and half of ours is worse than either.
 
 An `areaLabels` key is matched loosely, because the same area is spelt three
-ways across a corpus: `rules/auth-organizations/` is the directory, the nav and
-the ledger key on it, and the page's own `area:` frontmatter is whatever the
-corpus wrote there — often the source folder, `AuthOrganizations`. Case and
-separators are ignored, so one entry serves all three and no map needs the same
-area twice. A key nothing resolves to is reported as a warning, which `--strict`
-turns into a failed build: that is the shape this fails in, a site that renders
-the declared label in the nav and the raw folder name on the page.
+ways across a corpus: `rules/auth-organizations/` is the directory, which the
+nav and the ledger key on, and the page's own `area:` frontmatter is whatever
+the corpus wrote there — often the source folder, `AuthOrganizations`. Case,
+separators and Latin accents are ignored, so one declared entry serves all three
+sites and no map needs the same area twice. Declaring it twice anyway is
+harmless while both spellings carry the same label — that was the only way to
+get a correct site before the key spaces were joined. Two *different* labels for
+one area are reported, and the first declaration wins.
+
+Two warnings guard the way this shape fails, and `--strict` makes either a red
+build. A key that names no area the corpus publishes is a typo or a directory
+that was renamed. A page whose `area:` matches no key while its own directory
+does is a site that names one area two ways — the declared label in the nav, the
+raw string on the page — which is the thing the map exists to prevent.
 
 **`docs.config.json` -> `statusSidecar`** is optional and worth knowing about.
 Some corpora compute a status token that carries more than one fact: the same
