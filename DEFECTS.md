@@ -439,6 +439,48 @@ render() before the branch dispatch).
 Each of these has a real trade-off and should be decided rather than patched.
 Recommendations are mine; the call is not.
 
+#### Before the build-over-build diff: the artifact has no build identity
+
+`src/build.mjs:879` · **decide before building the diff, not after**
+
+The three things `DESIGN.md` says keep the door open — stable IDs, a schema
+version, caveat kinds as an enum — are all intact, and `rules.json` is
+byte-identical to v0.1.0 across both commits on this branch. Verified, not
+assumed. But two artifacts of the same corpus cannot currently be **ordered**,
+which is the one thing a "what moved since the last publish" diff needs first.
+
+`generatedAt` is deliberately *not* a build timestamp. `readGeneratedDate` reads
+the date the corpus states its statuses were computed at, and `DESIGN.md` is
+explicit about why: deriving it from the clock "would put a fresh date on a
+stale answer". So two builds a week apart carry the **same** `generatedAt`, and
+a corpus that declares no `statusSidecar` carries `null` — measured:
+
+```
+with the declared statusSidecar   generatedAt: "2031-03-04"
+with no config at all             generatedAt: null
+```
+
+The diff therefore needs its own field, distinct from `generatedAt` and not
+derived from the clock either — a content hash over the rule set would order
+builds without claiming freshness. Deciding it now is free; adding it once
+v0.1.0 artifacts exist in the wild is a schema bump.
+
+#### Before the build-over-build diff: caveat kinds are an enum per corpus, not globally
+
+`src/build.mjs:323-325` · **decide before building the diff, not after**
+
+Only `unpinned` is ours. Every other kind is `b.id`, which comes from the
+customer's own `statusSidecar.groups[].id` in `docs.config.json` — `changed` and
+`newly-tested` in the fixture are the fixture's names, not the package's. The
+enum is therefore customer-declared and mutable.
+
+If the diff keys on `kind` to say "this rule gained the *nothing tests this*
+caveat", then renaming a group id in `docs.config.json` makes every affected
+rule appear to have simultaneously lost one caveat and gained another, with no
+behaviour having changed at all — which is precisely the false-movement report
+this feature exists to avoid. Either the ids have to be documented as
+rename-hostile, or the diff has to compare on something stabler.
+
 #### At <=860px no group other than the reader's current one is reachable, and the home page's nav is a single self-link
 
 `src/theme/viewer.css:600` · **high**
