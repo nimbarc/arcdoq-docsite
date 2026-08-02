@@ -133,6 +133,15 @@ the accent colour, the area label map, and the evidence marker vocabulary.
 Merging is shallow per top level key: overriding `areaLabels` supplies the whole
 map. Half a customer's labels and half of ours is worse than either.
 
+An `areaLabels` key is matched loosely, because the same area is spelt three
+ways across a corpus: `rules/auth-organizations/` is the directory, the nav and
+the ledger key on it, and the page's own `area:` frontmatter is whatever the
+corpus wrote there — often the source folder, `AuthOrganizations`. Case and
+separators are ignored, so one entry serves all three and no map needs the same
+area twice. A key nothing resolves to is reported as a warning, which `--strict`
+turns into a failed build: that is the shape this fails in, a site that renders
+the declared label in the nav and the raw folder name on the page.
+
 **`docs.config.json` -> `statusSidecar`** is optional and worth knowing about.
 Some corpora compute a status token that carries more than one fact: the same
 token can mean "the behaviour changed" or "only the evidence changed", which are
