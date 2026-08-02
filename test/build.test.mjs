@@ -145,6 +145,30 @@ describe('provenance', () => {
     assert.ok(!/<th>\s*<\/th>/.test(html), 'not rendered as an empty-headed table')
   })
 
+  test('a glyph standing beside its own name does not read it out too', () => {
+    // Inline the glyph carries the name; in the key and on a coverage tag the
+    // words follow as text, so announcing both gives "seen, image. seen."
+    const dt = /<dt>[\s\S]*?<\/dt>/.exec(/<dl class="ev-key">[\s\S]*?<\/dl>/.exec(html)[0])[0]
+    assert.match(dt, /aria-hidden="true"/)
+    assert.ok(!dt.includes('aria-label'), 'the visible k-name is the label')
+    assert.match(/<p class="cover-tag">[\s\S]*?<\/p>/.exec(html)[0], /aria-hidden="true"/)
+    // Inline marks keep their name: nothing else names them.
+    const inlineMark = /<span class="ev-mark" data-ev="seen" role="img"[^>]*>/.exec(html)
+    assert.ok(inlineMark, 'a mark in prose still announces itself')
+  })
+
+  test('a page that omits `verified:` is still marked unverified', () => {
+    // The tone used to key off the literal string, so omitting the key rendered
+    // a plain "never" and the key bar dropped its chip on exactly the pages
+    // least entitled to look verified.
+    const r2 = adHoc({
+      'docs.json': JSON.stringify({ name: 'x',
+        navigation: { groups: [{ group: 'Guides', pages: ['g/a'] }] } }),
+      'g/a.md': '---\nwalked-by-agent: 2031-03-04\n---\n\n# A\n\nBody.\n',
+    })
+    assert.match(r2.read('g-a.html'), /<dd><span data-tone="pending">never<\/span><\/dd>/)
+  })
+
   test('claim counts come from the render, so the strip cannot disagree', () => {
     const strip = /<dt>Claims<\/dt><dd>([\s\S]*?)<\/dd>/.exec(html)[1].replace(/<[^>]+>/g, '')
     const runs = (html.match(/class="claim"/g) || []).length
@@ -308,6 +332,51 @@ describe('the client layer', () => {
   test('and still works arriving on a deep link, which is how it hid', () => {
     const appended = load({ hash: '#ord-003' })
     assert.ok(appended.some((n) => n.className === 'sheet'))
+  })
+
+  test('it survives a fragment that will not percent-decode', () => {
+    // `#50%-off` makes decodeURIComponent throw URIError. Unguarded at the top
+    // level it took out the same everything the empty hash did — a different
+    // trigger reaching the identical failure.
+    const appended = load({ hash: '#50%-off' })
+    assert.ok(appended.some((n) => n.className === 'sheet'),
+      'a fragment that will not decode must not cost the reader the page')
+  })
+
+  test('the copy toast cannot go on catching clicks after it fades', () => {
+    // It is faded with opacity and never removed from the DOM.
+    const src = fs.readFileSync(VIEWER, 'utf8')
+    const style = /Object\.assign\(n\.style, \{[\s\S]*?\}\)/.exec(src)[0]
+    assert.match(style, /pointerEvents: 'none'/)
+  })
+
+  test('the one animated motion in the viewer is gated on reduced motion', () => {
+    // behavior:'smooth' in the options object overrides computed
+    // scroll-behavior, so the CSS reduce block cannot reach it.
+    const code = fs.readFileSync(VIEWER, 'utf8').replace(/^\s*\/\/.*$/gm, '')
+    assert.match(code, /matchMedia\('\(prefers-reduced-motion: reduce\)'\)/)
+    assert.ok(!/behavior: 'smooth'/.test(code), 'no unconditional smooth scroll')
+  })
+})
+
+describe('paper', () => {
+  const css = (f) => fs.readFileSync(path.join(import.meta.dirname, '../src/theme', f), 'utf8')
+
+  test('a dark-themed page prints on the light ladder', () => {
+    // Browsers drop background colours and honour `color`, so a dark page
+    // printed --ink at 1.11:1 on white: blank paper in hairline frames.
+    const t = css('tokens.css')
+    const screenOnly = /@media screen \{[\s\S]*?\n\}\s*\/\* @media screen \*\//.exec(t)
+    assert.ok(screenOnly, 'the dark half is scoped to the screen')
+    assert.match(screenOnly[0], /:root\[data-theme="dark"\]/)
+    assert.ok(!/^:root\[data-theme="dark"\]/m.test(t.replace(screenOnly[0], '')),
+      'no dark override escapes the screen scope')
+  })
+
+  test('nothing is silently cut off, because paper cannot scroll', () => {
+    const print = /@media print \{[\s\S]*?\n\}/.exec(css('viewer.css'))[0]
+    assert.match(print, /pre\.code, \.table-wrap \{ overflow: visible/)
+    assert.match(print, /white-space: pre-wrap/)
   })
 })
 

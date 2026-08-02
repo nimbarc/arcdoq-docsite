@@ -747,6 +747,13 @@ table.no-head thead { display: none; }
   .side, .rail, .top, .keybar, .sheet { display: none !important; }
   .frame { display: block; }
   .rule { break-inside: avoid; }
+  /* A scroll container has nothing to scroll on paper: whatever overflows is
+     simply cut off, and a long test invocation or a wide table loses its tail
+     with no sign it was ever there. Truncating a citation is the one thing this
+     design refuses to do, so on paper they wrap like everything else. */
+  pre.code, .table-wrap { overflow: visible; max-width: none; }
+  pre.code { white-space: pre-wrap; overflow-wrap: anywhere; }
+  table { min-width: 0; }
 }
 
 /* The declared gap group is the burn-down, and it is set back so it reads as

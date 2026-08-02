@@ -2,19 +2,19 @@
 
 Produced 2026-08-02 by a browser pass at 390px plus a seven-dimension adversarial
 audit (38 candidate findings, each independently attacked by a second agent
-before it was allowed to stand; 3 refuted, 35 confirmed). Fourteen of the 35 are
-already fixed **in the working tree**, uncommitted. Twenty-one remain and are
-recorded below with enough detail to act on without re-deriving them.
+before it was allowed to stand; 3 refuted, 35 confirmed). Twenty-one of the 35
+are fixed on `mobile-verification-pass`. Fourteen remain and are recorded below
+with enough detail to act on without re-deriving them.
 
 Every entry was reproduced against real source, most against a real build, and
 several in a real browser. Anything that could not be reproduced was dropped.
 
 ---
 
-## Fixed in this working tree (do not redo)
+## Already fixed (do not redo)
 
-Uncommitted. Tests went 22 -> 43; every new test was verified to fail against the
-defect it covers and pass against the fix.
+On branch `mobile-verification-pass`. Tests went 22 -> 50; every new test was
+verified to fail against the defect it covers and pass against the fix.
 
 **From the 390px browser pass**
 
@@ -51,6 +51,34 @@ defect it covers and pass against the fix.
 - `htmlName()` collisions and duplicate rule IDs silently discarded a page and a
   rule; both are reported now, and `--strict` makes them fail the build.
 
+**From the cheap-correctness batch**
+
+- A page left in dark theme printed its light ink onto white paper — `--ink` at
+  1.11:1, so every statement and every sentence of prose came out blank inside
+  near-black hairline frames. The dark half of `tokens.css` is scoped to
+  `@media screen`, so paged media falls back to the light ladder and the two
+  can never drift; layer 2 follows for free, being aliases all the way down.
+- `decodeURIComponent` on the raw fragment threw `URIError` on `#50%-off` and
+  took out the rest of the IIFE — the same failure as the empty hash, reached by
+  a different trigger. Both read sites go through a `hashId()` that falls back
+  to the raw bytes.
+- The permalink click ran an unconditional smooth scroll the length of the page.
+  `behavior: 'smooth'` in the options object overrides computed
+  `scroll-behavior`, so no CSS the reduce block writes can reach it; it is gated
+  in script now.
+- The copy toast faded with opacity and was never removed, going on catching
+  clicks at bottom-centre for the life of the page. `pointer-events: none`.
+- The key bar's unverified chip keyed off a span that only existed when
+  `verified:` was written literally, so a page that omitted the key looked
+  unverified in the strip and verified in the bar. The tone follows the value.
+- `pre.code` and `.table-wrap` are scroll containers, and paper cannot scroll:
+  long citations and wide tables were cut off with no sign they continued. They
+  wrap in print instead — truncating a citation is the one thing this design
+  refuses to do.
+- Evidence glyphs announced their own name immediately before the same word
+  appeared as text ("seen, image. seen."). Beside a written label the glyph is
+  decoration; inline in prose, where nothing else names it, it still announces.
+
 The `rules.json` contract is byte-identical to HEAD: stable IDs and anchors,
 `schema: 1`, caveat kinds still an enum. The door the deferred build-over-build
 diff needs is still open at no cost.
@@ -59,7 +87,7 @@ diff needs is still open at no cost.
 
 ## 1. Search — one rebuild, not ten patches
 
-Ten of the twenty-one are symptoms of a single thing: search shipped as the
+Ten of the fourteen are symptoms of a single thing: search shipped as the
 JS-only modal that `DESIGN.md` **cut outright**, and was never built to the spec
 that is already written down there:
 
@@ -406,288 +434,7 @@ expanded', 'false') on the no-hits branch (or hoist both resets to the top of
 render() before the branch dispatch).
 ---
 
-## 2. Cheap correctness — one sitting, independent of each other
-
-None of these interact; they can be done in any order and each is small.
-
-#### Dark theme prints as invisible text on white paper — the print block never resets colour
-
-`src/theme/viewer.css:717` · **high**
-
-viewer.js:18 runs `setTheme(stored || (prefersDark ? 'dark' : 'light'))`, so
-an OS-level dark preference (or one stored click) leaves `data-theme="dark"`
-on <html> permanently — including when the page is printed. Nothing in the
-@media print block (viewer.css:717-721) resets the palette, there is no
-`print-color-adjust`, no `@page`, and no `:root` override under print anywhere
-in tokens.css or viewer.css (grepped: zero hits for `print-color-adjust`,
-`color-adjust`, `@page`).
-Chrome, Safari and Firefox all default to NOT printing background colours, so
-`body { background: var(--canvas) }` is dropped and the sheet is white — but
-`color` IS printed. I computed the dark-theme tokens against white paper:
-  --ink   oklch(0.965 0.006 285) = #f3f3f7 → 1.11:1
-  --ink-2 oklch(0.820 0.012 285) = #c3c3cc → 1.75:1
-  --ink-3 oklch(0.660 0.014 285) = #91919b → 3.12:1
-  --amber oklch(0.800 0.135 78)  = #edb24d → 1.90:1
-  --accent oklch(0.780 0.150 296)= #c0a2ff → 2.13:1
-So every rule statement, h1, `strong` and `.note-title` (--ink) is effectively
-blank, and all body prose (--ink-2) is unreadable. Inverted, the hairline
-tokens survive: --line = #2d2d37 (13.68:1) and --line-soft = #1f1f28
-(16.27:1), so the borders of `.note`, `.page-provenance`, `pre.code`, `.page-
-ahead` and every table rule print as near-black frames drawn around empty
-space. The only legible text on the page is --ink-4 (#6b6b74, 5.29:1) — the
-tier-origin and citation metadata. If the reader instead ticks "Background
-graphics" to fix it, the whole sheet prints as a solid near-black rectangle.
-The light theme prints correctly, and so does the JS-disabled case
-(build.mjs:705 hard-codes `data-theme="light"`), which is exactly why this
-survives a casual check.
-
-*Fails when:* macOS/Windows set to dark appearance → open any generated rules page (e.g.
-rules-orders-lifecycle.html) → Cmd+P → the printed sheet shows near-black
-boxes and hairlines with the rule IDs and statements rendered at 1.11:1
-contrast, i.e. blank paper.
-
-*Verifier’s correction:* Real defect, slightly overstated in its visual description. Accurate version:
-the @media print block at src/theme/viewer.css:717-721 handles layout only and
-never resets the palette, and there is no print-color-adjust, no @page, and no
-[data-theme] override under print anywhere in tokens.css or viewer.css.
-Because src/theme/viewer.js:18 sets data-theme from the OS preference (or
-localStorage) at load and that attribute persists into printing, a reader on a
-dark-appearance OS printing any generated page gets browsers' default "don't
-print backgrounds" behaviour: the dark canvas is dropped to white while the
-light ink colours are honoured. Result on paper — h1, rule IDs/statements,
-strong and .note-title in --ink at 1.11:1 and all body prose in --ink-2 at
-1.75:1 are effectively invisible; --ink-3 tier text at 3.12:1 is faint; only
---ink-4 metadata (5.29:1) reads normally. No filled black boxes appear, since
-backgrounds are dropped — what survives is the near-black hairline borders
-(--line 13.68:1, --line-soft 16.27:1) of .note, .page-provenance, pre.code,
-.page-ahead and table rules, framing blank space. Enabling "Background
-graphics" does produce a readable page (dark canvas, light ink), so there is a
-workaround, but it prints a solid near-black sheet. Light theme and the JS-
-disabled path are unaffected because build.mjs:737 hard-codes data-
-theme="light". Severity is moderate: a secondary output path, conditional on
-OS dark mode or one theme-toggle click, fixed by adding a light-token (or
-color-scheme:light plus token) override for :root[data-theme="dark"] inside
-the existing @media print block.
-
-#### decodeURIComponent on the raw fragment throws URIError and kills the whole IIFE
-
-`src/theme/viewer.js:29` · **medium**
-
-Line 29 (`const h = decodeURIComponent(location.hash.slice(1))`) — and line 39
-inside frame() — decode an attacker/reader-supplied fragment with no guard. A
-fragment containing a `%` that does not begin a valid escape makes
-decodeURIComponent throw URIError. Line 29 runs at top level of the IIFE, so
-the throw takes out everything below it: permalink copying, the scroll-spy,
-the keybar, and the entire search sheet are never wired. This is a distinct
-trigger and a distinct line from the known `frame()` empty-hash crash; fixing
-that one does not fix this.
-
-*Fails when:* Open any generated page with `#50%-off` (a hand-typed or hand-edited fragment,
-or a corpus anchor `<a id="50%-off"></a>`, which buildPage copies verbatim
-into the rule id): 'URIError: URI malformed' at viewer.js:29, and the page
-loses theme toggling, permalinks and search entirely.
-
-*Verifier’s correction:* Real defect, one degree narrower than claimed. `viewer.js:29` decodes
-`location.hash` with no guard at the top level of the IIFE, so any fragment
-containing a `%` that does not begin a valid escape (`#50%-off`, `#100%`)
-throws `URIError: URI malformed` and aborts the rest of the script. Lost: case
-recovery, the `:target` framing/persistent target, permalink click-to-copy on
-`.rule-id`, the rail scroll-spy, the docking key bar, and the entire search
-sheet (it is created in JS, so `/` and Cmd-K do nothing and the sheet never
-exists). NOT lost: theme application and the theme toggle, which are wired at
-lines 8-23 before the throwing line — the page still renders and toggles
-light/dark. Line 44 inside `frame()` has the identical unguarded decode; it is
-unreachable on a malformed initial load (line 29 throws first) but throws on
-its own if a reader edits the fragment to a malformed value after a clean
-load, killing hash-change framing from then on while leaving the rest of the
-page wired. The corpus-anchor path is a theoretical rather than practical
-trigger: buildPage does copy `pendingAnchor` verbatim into `rule.anchor`
-(src/build.mjs:404-423), but only for an anchor immediately preceding a valid
-`### ID — statement` heading, and it warns `anchor/ID mismatch` when the
-anchor is not the lowercased rule ID. Fix is a one-line wrapper — a
-`safeHash()` helper that try/catches `decodeURIComponent` and falls back to
-the raw `location.hash.slice(1)` — used at both line 29 and line 44.
-
-#### prefers-reduced-motion block cannot reach the JS smooth scroll on every permalink click
-
-`src/theme/viewer.css:713` · **medium**
-
-The reduce block only zeroes `transition-duration` and `animation-duration`.
-The one genuinely animated motion in the viewer is not a CSS transition or
-animation — it is a script-driven scroll:
-  viewer.js:64  a.closest('.rule')?.scrollIntoView({ block: 'start', behavior:
-'smooth' })
-`behavior: 'smooth'` passed explicitly in the options object overrides the
-element's computed `scroll-behavior` and is unaffected by any CSS the reduce
-block can write; there is no `scroll-behavior: smooth` declaration anywhere in
-viewer.css for it to neutralise either. This fires on the primary interaction
-of the whole design — clicking a `.rule-id` to take a permalink — and the
-scroll can span the full length of a 35-rule page. viewer.js never reads
-`matchMedia('(prefers-reduced-motion: reduce)')`; it only reads `(prefers-
-color-scheme: dark)` at line 9, so the plumbing to gate this is one line away
-but absent.
-
-*Fails when:* OS set to Reduce Motion → open a rules page → click the ORD-004 rule ID to
-copy its permalink → the page runs a full animated smooth scroll to that rule,
-exactly the vestibular trigger the reduce block is there to suppress.
-
-*Verifier’s correction:* Real defect, materially overstated in impact.
-
-#### The flash toast is faded with opacity but stays in the DOM, capturing clicks at bottom-centre forever
-
-`src/theme/viewer.js:92` · **low**
-
-flash() creates a `position: fixed; bottom: 22px; left: 50%` div and, after
-1400ms, only sets `opacity: '0'` (line 92). There is no `.flash` rule anywhere
-in viewer.css (grep confirms), so it has no `pointer-events: none`, is never
-removed, and is never `display: none`. An opacity-0 element still hit-tests,
-so a ~110x33px invisible box permanently blocks clicks/taps at the bottom
-centre of the viewport for the rest of the session.
-
-*Fails when:* Click any rule ID to copy its permalink, wait 2 seconds, then try to click a
-link that happens to sit at the bottom-centre of the viewport (easy on a
-phone, where the measure is full-width): the click lands on the invisible
-toast and nothing happens.
-
-*Verifier’s correction:* Real defect, with the scope narrowed. flash() creates a single `.flash` div
-and, at viewer.js:97, only sets `opacity: '0'` after 1400ms. There is no
-`.flash` CSS rule anywhere, so the element keeps `pointer-events: auto`,
-`display: block` and `visibility: visible`, and an opacity-0 element still
-hit-tests. Measured in Chrome on the built fixture, a 92.7x38.25px invisible
-box sits at `bottom: 22px; left: 50%` with `z-index: 50` and swallows clicks:
-`document.elementFromPoint` at its centre returns the toast, and 6 of the 18
-interactive elements on the fixture page (the "Rules on this page" summary,
-two rail links, the ORD-001/ORD-003 permalinks, an inline body link) are
-unclickable when scrolled under it. Two corrections to the report: (1) the
-toast does not fade — computed transition-duration is 0s, so it vanishes in
-one frame, which is a separate cosmetic bug in the same function; (2) the dead
-hit target persists for the rest of the current page view, not the rest of the
-session, since this is a multi-page static site and each navigation is a full
-document load. Fix is one line: add `pointerEvents: 'none'` to the inline
-style object, or replace the timeout body with `n.remove()`.
-
-#### Keybar's unverified chip keys off a presentational span, so it silently drops when `verified:` is absent
-
-`src/theme/viewer.js:114` · **low**
-
-Line 114 detects 'this page has never been human-verified' via
-`document.querySelector('.page-provenance [data-tone="pending"]')`, then
-hardcodes the words `Human-verified <b>never</b>`. build.mjs:642 only emits
-that toned span when `d.verified === 'never'` is written explicitly; when the
-key is missing it falls through to `esc(d.verified || 'never')`, i.e. the
-plain text 'never'. The strip and the docked bar then disagree about the same
-page.
-
-*Fails when:* Give a guide frontmatter `walked-by-agent: 2031-03-04` with no `verified:`
-line. The provenance strip reads 'Human-verified never', but once the reader
-scrolls past the legend the docked keybar omits the 'Human-verified never'
-chip entirely — the caveat disappears exactly when the strip has scrolled out
-of view.
-
-*Verifier’s correction:* Real defect, with two corrections. (1) Line references are wrong: the keybar
-logic is src/theme/viewer.js:118-135 (query at 122, chip at 128), not 114; the
-strip row is src/build.mjs:677-678, not 642. (2) The divergence originates in
-build.mjs, not viewer.js — the same rendered words ("never") get amber `[data-
-tone="pending"]` emphasis (viewer.css:417) when the key is written explicitly
-and plain ink when it is omitted, so the strip itself already under-states the
-caveat before the keybar is involved; the dropped chip is the downstream
-symptom of viewer.js keying off a purely presentational hook instead of the
-underlying fact. The right fix is at the source: emit the toned span whenever
-the effective value is 'never' (`(d.verified || 'never') === 'never'`), or
-better, carry the fact as data (e.g. a `data-verified="never"` attribute on
-`.page-provenance`) and have viewer.js read that. Scope limit worth noting:
-the keybar block only runs when the page authors an evidence legend table
-(`.ev-key`, build.mjs:520), so a `walked-by-agent` guide with no legend has no
-docked bar at all and loses nothing extra; the failure needs a page that has
-both a legend and a `walked-by-agent` line without `verified:` — which the
-shipped fixture would hit if that one frontmatter line were dropped.
-
-#### pre.code and .table-wrap are scroll containers, so overflowing content is silently clipped in print
-
-`src/theme/viewer.css:460` · **low**
-
-`pre.code` is `max-width: 70ch` + `overflow-x: auto` (:460-465) and `.table-
-wrap` is `overflow-x: auto` (:468). On screen the reader scrolls; in paged
-media there is no scrollbar and the scrollable overflow is clipped to the box,
-with no ellipsis, no wrap and no visual indication that anything was cut. The
-print block resets neither, and neither has `white-space: pre-wrap` or
-`overflow: visible` under print.
-At 12.5px JetBrains Mono the 70ch box is roughly 525px, so anything past about
-70 characters on a line disappears. Since the corpus is arbitrary markdown and
-the generator styles fenced code as a first-class element, a long command, a
-fully-qualified type name or a JSON payload on one line is an ordinary input.
-Same mechanism clips any 3+ column table wider than its column (the `data-
-cols='2'` stacking at :694 deliberately exempts those from reflowing).
-
-*Fails when:* Author a rule body containing a fenced code block with a 120-character line
-(e.g. a `dotnet test --filter "FullyQualifiedName~Meridian.Business.Tests.Orde
-rServiceTests.Place_Rejects_WhenStockUnavailable"` invocation) → on screen it
-scrolls horizontally; printed, it is cut mid-token at ~70 chars and the reader
-has no way to know the line continued.
-
-*Verifier’s correction:* Real, with two corrections. (1) Effective cut is ~66-67 characters, not 70:
-`box-sizing: border-box` (viewer.css:17) means the 70ch cap includes the
-13px/15px padding and 1px borders. Measured cut in the printed PDF: exactly 67
-chars. (2) "No visual indication" is not quite right in Chrome — it paints an
-inert scrollbar track and thumb beneath the block in the PDF, which hints that
-something scrolls but never says what was lost, is unusable on paper, and is
-engine/print-path dependent. (3) The table half is real but narrower than
-stated: it needs a cell whose min-content width is unbreakable. A genuinely
-wide 6-column prose table wrapped and fit within the printed page (the print
-`.frame { display: block }` plus hidden side/rail gives tables the full page
-width). But a table whose cells hold long plain-text dotted identifiers does
-clip: in the same PDF a 3-column table lost its entire third column and cut
-both values mid-token. Note `td` has no `overflow-wrap`, while inline `code`
-does (:458), so backticked long tokens in cells survive and bare ones do not.
-The `data-cols='2'` stacking at :694 lives in the `max-width: 720px` block and
-never fires in print (Letter is ~816 CSS px), so it neither causes nor
-mitigates this. Fix is the usual one-liner in the print block: `pre.code {
-white-space: pre-wrap; overflow-wrap: anywhere; overflow: visible; max-width:
-none }` and `.table-wrap { overflow: visible }` with `td { overflow-wrap:
-anywhere }`.
-
-#### Evidence glyphs announce their label twice — role="img" aria-label immediately followed by the same words as text
-
-`src/build.mjs:521` · **low**
-
-`markGlyph()` (build.mjs:146-148) emits `<span class="ev-mark" role="img"
-aria-label="<short>">`. Three call sites then place text that repeats or
-subsumes that label directly beside it: the legend at build.mjs:521 renders
-`<dt>{glyph}<span class="k-name">{short}</span></dt>` with the identical
-string; the coverage tag at build.mjs:449 renders `{glyph}
-<span>{label}</span>` where `label` begins with the same words; and
-viewer.js:125 clones the legend `<dt>`'s innerHTML into the key bar, carrying
-the duplication with it. Verified in the built fixture output: `<dt><span
-class="ev-mark" role="img" aria-label="seen">…</span><span
-class="k-name">seen</span></dt>`. The glyph is decorative wherever its label
-is already written out next to it and should be `aria-hidden="true"` there,
-keeping `role="img"` only for inline claim marks where nothing else names it.
-
-*Fails when:* A screen reader reading the evidence key on dist/guides-refund-an-order.html
-announces "seen, image. seen. seen rendering in the browser" for the first
-term and "from source, image. from source. read from source, accurate about
-what the code does…" for the second; the coverage tag reads "from source read
-from source, accurate about what the code does, silent about what renders".
-
-*Verifier’s correction:* `markGlyph()` (src/build.mjs:147) always attaches `role="img" aria-
-label="<short>"`, and three renderings place equivalent text directly beside
-the glyph, so a screen reader speaks the same words twice: the legend `<dt>`
-(src/build.mjs:521) pairs the label with an identical `.k-name` string ("seen,
-image. seen. — seen rendering in the browser"), the coverage tag
-(src/build.mjs:449) pairs it with a label that begins with the same words
-("from source — read from source, accurate about what the code does, silent
-about what renders"), and the key bar (src/theme/viewer.js:125) clones the
-legend `<dt>` markup so it repeats the legend's duplication whenever it is
-docked (it is `hidden aria-hidden="true"` otherwise). This is a minor
-verbosity issue, not a conformance failure — nothing is unlabeled or
-unreachable, and only 3 of 18 glyph instances on dist/guides-refund-an-
-order.html are affected; the 15 inline claim marks correctly need `role="img"`
-because nothing else names them. The fix is to make the glyph decorative
-(`aria-hidden="true"`, drop `role`/`aria-label`) at the legend and coverage-
-tag call sites only, e.g. by giving `markGlyph()` a "labelled elsewhere" mode.
----
-
-## 3. Decisions, not defects
+## 2. Decisions, not defects
 
 Each of these has a real trade-off and should be decided rather than patched.
 Recommendations are mine; the call is not.
@@ -833,8 +580,8 @@ schema, not a paging-specific gap.
 
 ## Notes for whoever picks this up
 
-**The working tree is the only copy.** ~690 lines across six files, uncommitted.
-A patch is at `../arcdoq-docsite-mobile.patch` if the tree gets reset.
+**Where the work is.** Branch `mobile-verification-pass`, not yet merged or
+pushed. A patch of the first commit is at `../arcdoq-docsite-mobile.patch`.
 
 **Reproducing 390px.** Chrome on macOS will not resize a window below ~606px
 outer width, so `resize_window` cannot reach a phone viewport. Drive it through a

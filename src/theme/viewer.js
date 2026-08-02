@@ -22,11 +22,23 @@
     setTheme(next)
   })
 
+  /* ── reading the fragment ──────────────────────────────────────────────── */
+  // decodeURIComponent throws URIError on any `%` that does not begin a valid
+  // escape — `#50%-off` is enough. Unguarded at the top level of this IIFE it
+  // took out everything below it, which is the same failure mode as the empty
+  // hash and a different trigger. A fragment that will not decode is still a
+  // fragment: fall back to the raw bytes rather than losing the page.
+  const hashId = () => {
+    const raw = location.hash.slice(1)
+    try { return decodeURIComponent(raw) } catch { return raw }
+  }
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)')
+
   /* ── case recovery on arrival ──────────────────────────────────────────── */
   // A hand-typed #AREA-012 out of a ticket must not 404 into nothing.
   // history.replaceState does NOT update the document's target element, so
   // :target would never match. location.replace is the fix.
-  const h = decodeURIComponent(location.hash.slice(1))
+  const h = hashId()
   if (h && !document.getElementById(h) && document.getElementById(h.toLowerCase())) {
     location.replace(location.pathname + location.search + '#' + h.toLowerCase())
   }
@@ -41,7 +53,7 @@
   // the key bar with it. Arriving on a deep link hid it, which is the one
   // journey this design calls dominant. Ternary, not &&.
   const frame = () => {
-    const id = decodeURIComponent(location.hash.slice(1))
+    const id = hashId()
     document.querySelectorAll('.rule.is-target').forEach((n) => n.classList.remove('is-target'))
     const el = id ? document.getElementById(id) : null
     if (el?.classList.contains('rule')) el.classList.add('is-target')
@@ -61,7 +73,13 @@
       e.preventDefault()
       history.pushState(null, '', '#' + a.getAttribute('href').slice(1))
       frame()
-      a.closest('.rule')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+      // `behavior: 'smooth'` in the options object overrides computed
+      // scroll-behavior, so no CSS the reduce block can write reaches it. This
+      // fires on the primary interaction of the whole design, and the scroll
+      // can span a 35-rule page, so it has to be gated in script.
+      a.closest('.rule')?.scrollIntoView({
+        block: 'start', behavior: reduceMotion.matches ? 'auto' : 'smooth',
+      })
       try {
         if (e.altKey) { await navigator.clipboard.writeText(url); flash(a, 'URL copied'); return }
         const html = `<a href="${url}">${id}</a>`
@@ -89,6 +107,10 @@
         background: 'var(--canvas-top)', color: 'var(--ink)', zIndex: 50,
         border: '1px solid var(--line)', borderRadius: '8px',
         padding: '8px 14px', fontSize: '12.5px', boxShadow: 'var(--lift)',
+        // It is faded with opacity and never removed, so without this it goes
+        // on swallowing clicks at bottom-centre for the life of the page —
+        // which on a phone is the full width of the measure.
+        pointerEvents: 'none',
       })
     }
     n.textContent = msg

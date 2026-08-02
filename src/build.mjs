@@ -150,8 +150,13 @@ const glyphSvg = (kind) => kind === 'solid'
   ? '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="3.4"/></svg>'
   : '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="3.7" fill="none" stroke-width="1.6" stroke-dasharray="2.1 1.9"/></svg>'
 
-function markGlyph(m) {
-  return `<span class="ev-mark" data-ev="${m.id}" role="img" aria-label="${esc(m.short)}">${glyphSvg(m.glyph)}</span>`
+// Inline in prose the glyph IS the information and carries its own name. Beside
+// a written label — in the key, or on a coverage tag — that name is read out
+// immediately before the same words appear as text ("seen, image. seen."), so
+// there the glyph is decoration and says nothing.
+function markGlyph(m, { labelled = true } = {}) {
+  const a = labelled ? `role="img" aria-label="${esc(m.short)}"` : 'aria-hidden="true"'
+  return `<span class="ev-mark" data-ev="${m.id}" ${a}>${glyphSvg(m.glyph)}</span>`
 }
 
 // Guard A: a token is a mark only when it closes a clause. It is NOT a mark
@@ -453,7 +458,8 @@ function buildPage(relPath) {
         )
         const sink = lastBlock.sink
         sink[sink.length - 1] = `<div class="covered">${sink[sink.length - 1]}` +
-          `<p class="cover-tag">${markGlyph(cov)} <span>${esc(cov.label)}</span></p></div>`
+          `<p class="cover-tag">${markGlyph(cov, { labelled: false })} ` +
+          `<span>${esc(cov.label)}</span></p></div>`
         continue
       }
       push(`<p>${provenance(t.text)}</p>`)
@@ -532,7 +538,8 @@ function renderTable(t) {
   const legend = asLegend(t)
   if (legend) {
     return `<dl class="ev-key">` + legend.map(({ mk, text }) =>
-      `<div><dt>${markGlyph(mk)}<span class="k-name">${esc(mk.short)}</span></dt>` +
+      `<div><dt>${markGlyph(mk, { labelled: false })}` +
+      `<span class="k-name">${esc(mk.short)}</span></dt>` +
       `<dd>${inline(text)}</dd></div>`).join('') + `</dl>`
   }
   const blank = t.header.every((h) => !(h.text || '').trim())
@@ -689,8 +696,14 @@ function renderProvenanceStrip(page, tally) {
   const total = Object.values(tally).reduce((a, b) => a + b, 0)
   const fromSource = tally['from-source'] || 0
   const rows = []
-  rows.push(['Human-verified', d.verified === 'never'
-    ? '<span data-tone="pending">never</span>' : esc(d.verified || 'never')])
+  // The tone follows the VALUE, not whether the key was written. Keying off the
+  // literal string meant a page that simply omitted `verified:` rendered the
+  // same "never" as plain text, and the key bar — which detects the unverified
+  // state by looking for this span — silently dropped its chip on exactly the
+  // pages least entitled to look verified.
+  const verified = d.verified || 'never'
+  rows.push(['Human-verified', verified === 'never'
+    ? '<span data-tone="pending">never</span>' : esc(verified)])
   if (d['walked-by-agent']) rows.push(['Agent walk', esc(d['walked-by-agent'])])
   if (d['walked-in']) rows.push(['Walked in', esc(d['walked-in'])])
   if (total) rows.push(['Claims', `${total} <span class="pv-split">${fromSource} from source</span>`])
