@@ -1,12 +1,12 @@
 name: Build a docs site
-description: Turns a markdown corpus into a finished self-contained static site.
+description: Turns a markdown corpus into a finished self-contained static site, and publishes it.
 author: arcdoq
 
 # Referencing this action at a tag pins the GENERATOR to the same tag, because
 # the run step installs `github.action_ref`. One version, one line, and a
 # consumer needs no package.json, no lockfile and no dependency of their own.
 #
-#   - uses: nimbarc/arcdoq-docsite@v0.1.0
+#   - uses: nimbarc/arcdoq-docsite@v0.2.0
 #
 # Bumping the tag in the workflow is the whole upgrade path. That is the same
 # argument as the package itself: a fork freezes, a version moves.
@@ -40,6 +40,41 @@ inputs:
     required: false
     default: docs-site
 
+  # --- publishing ---------------------------------------------------------
+  #
+  # Publishing is opt-in by the PRESENCE OF THE TOKEN, not by a separate boolean.
+  # That is deliberate: a consumer who bumps the tag and passes nothing new keeps
+  # exactly today's behaviour, so this release cannot break a workflow that
+  # already works. It also removes the state where `publish: true` is set but the
+  # token is missing, which would be a red check with nothing useful in it.
+  arcdoq-token:
+    description: >-
+      An arcdoq deploy token. Pass it from a secret and the built site is
+      published; omit it and this action only builds, exactly as before.
+    required: false
+    default: ''
+  site:
+    description: >-
+      The site's slug on arcdoq — the stable key every run deploys to. Required
+      when publishing. The same slug always resolves to the same site, so nothing
+      is kept between runs and no id is ever committed back into the repo.
+    required: false
+    default: ''
+  site-name:
+    description: Display name, used only when the site is first created. Defaults to the slug.
+    required: false
+    default: ''
+  visibility:
+    description: >-
+      public or private, honoured only when the site is first created. Changing a
+      live site's visibility is refused — do that in the arcdoq app, deliberately.
+    required: false
+    default: ''
+  arcdoq-endpoint:
+    description: Override arcdoq's deploy endpoint. For testing; leave unset.
+    required: false
+    default: ''
+
 outputs:
   out:
     description: Path to the built site.
@@ -72,14 +107,37 @@ runs:
         name: ${{ inputs.artifact-name }}
         path: ${{ inputs.out }}
 
-# Publishing is deliberately NOT a step here.
-#
-# arcdoq's publish_site is an MCP tool behind an opaque OAuth access token that
-# expires and is issued through an interactive flow. There is no machine
-# credential, so a publish step would have nothing to authenticate with and
-# would fail at the first run. Shipping one that "works" by holding a
-# hand-pasted token that silently expires is worse than shipping none.
-#
-# When the machine credential exists, publishing becomes a step in THIS file and
-# every consumer gets it by bumping the tag they already reference. That is the
-# reason to use the action rather than copying its steps into your own workflow.
+    # Publishing runs AFTER the artifact upload on purpose. If arcdoq refuses the
+    # deploy, the built site is still attached to the run, so the failure can be
+    # diagnosed from what was actually produced rather than reproduced locally.
+    - name: Publish to arcdoq
+      if: ${{ inputs.arcdoq-token != '' }}
+      shell: bash
+      env:
+        REF: ${{ github.action_ref || 'main' }}
+        # The token reaches the CLI through the environment, never through argv:
+        # a flag is visible in the process table and lands verbatim in `set -x`
+        # output. Every value here goes through env rather than being interpolated
+        # into the script, so a slug containing shell metacharacters is data.
+        ARCDOQ_DEPLOY_TOKEN: ${{ inputs.arcdoq-token }}
+        ARCDOQ_DEPLOY_ENDPOINT: ${{ inputs.arcdoq-endpoint }}
+        OUT_DIR: ${{ inputs.out }}
+        SITE: ${{ inputs.site }}
+        SITE_NAME: ${{ inputs.site-name }}
+        VISIBILITY: ${{ inputs.visibility }}
+      run: |
+        set -euo pipefail
+        if [ -z "${SITE}" ]; then
+          echo "::error::arcdoq-token was supplied but 'site' was not. Set the slug of the arcdoq site to deploy to."
+          exit 1
+        fi
+        args=(publish --site "${SITE}" --dir "${OUT_DIR}")
+        if [ -n "${SITE_NAME}" ];  then args+=(--name "${SITE_NAME}"); fi
+        if [ -n "${VISIBILITY}" ]; then args+=(--visibility "${VISIBILITY}"); fi
+        npx --yes "github:nimbarc/arcdoq-docsite#${REF}" "${args[@]}"
+
+# Why publishing lives HERE rather than in each consumer's workflow: it is the
+# reason to use the action at all. When the deploy contract changes, or a new
+# arcdoq capability becomes worth using, every consumer gets it by bumping the
+# tag they already reference. Copying these steps into your own workflow works
+# exactly once, and then goes stale silently.

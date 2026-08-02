@@ -17,7 +17,7 @@ own:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nimbarc/arcdoq-docsite@v0.1.0
+- uses: nimbarc/arcdoq-docsite@v0.2.0
   with:
     corpus: .
 ```
@@ -25,14 +25,62 @@ own:
 Referencing the action at a tag pins the generator to the same tag, so one line
 carries one version and bumping it is the entire upgrade path.
 
-Publishing is deliberately not a step in that action yet; see `action.yml` for
-why. When it becomes one, consumers get it by bumping the tag they already
-reference, which is the reason to use the action rather than copying its steps.
+### Publishing
+
+Add a token and a slug, and the same step ships the site:
+
+```yaml
+- uses: actions/checkout@v4
+- uses: nimbarc/arcdoq-docsite@v0.2.0
+  with:
+    corpus: .
+    site: docs
+    arcdoq-token: ${{ secrets.ARCDOQ_DEPLOY_TOKEN }}
+```
+
+That is the whole thing. There is no deploy job, no artifact hand-off, no
+credential to refresh: your CI builds a fileset and hands it to a host that
+already knows how to serve, gate, version and roll back a site. arcdoq never
+sees your repo.
+
+**Publishing is opt-in by the presence of the token.** Omit `arcdoq-token` and
+the action only builds, exactly as it did before — so bumping the tag can never
+start publishing something you did not ask it to.
+
+**The slug is the key.** Every run deploys to the site named by `site`, so
+nothing is stored between runs and no id is ever committed back into your repo.
+The first run creates the site; every run after updates it. Renaming that site
+in the arcdoq app breaks the link, and the next run will create a new one — so
+don't, or change `site` to match.
+
+| Input | | |
+|---|---|---|
+| `arcdoq-token` | — | a deploy token, from a secret. Its presence enables publishing |
+| `site` | — | the site's slug on arcdoq. Required when publishing |
+| `site-name` | the slug | display name, used only when the site is first created |
+| `visibility` | `public` | `public` or `private`, honoured only on create |
+
+`visibility` applies when the site is created and is then left alone: a routine
+CI run should not be able to flip a live site's exposure. Asking for one that
+disagrees with what is live is refused rather than ignored, so a job can never
+believe it made something private when it did not. Change it in the app.
+
+A published site is not always *reachable* the instant the step goes green. A
+private site needs its own edge route, which takes a few minutes to come up, and
+the step says so rather than printing a URL that would 404. It still passes —
+the deploy succeeded — but it will not call the site live until it is.
+
+### Getting a token
+
+Ask whoever administers your arcdoq workspace. Tokens are long-lived, scoped to
+one workspace, and revocable; store one as a repository secret (the example
+above expects `ARCDOQ_DEPLOY_TOKEN`) and never in a file. It is shown once at
+issue and cannot be recovered afterwards.
 
 ## Install
 
 ```bash
-npm i -D github:nimbarc/arcdoq-docsite#v0.1.0
+npm i -D github:nimbarc/arcdoq-docsite#v0.2.0
 ```
 
 A git dependency, versioned by tag. No registry and no auth needed. Publishing
@@ -41,10 +89,12 @@ to a registry later is a one line change here and nothing else.
 ## Use
 
 ```bash
-arcdoq-docsite build [--corpus <dir>] [--out <dir>] [--strict]
+arcdoq-docsite build   [--corpus <dir>] [--out <dir>] [--strict]
+arcdoq-docsite publish --site <slug> [--dir <dir>] [--name <name>]
+                       [--visibility public|private] [--repo <owner/name>] [--dry-run]
 ```
 
-| Flag | Default | |
+| `build` | Default | |
 |---|---|---|
 | `--corpus` | `.` | the directory holding `docs.json` |
 | `--out` | `dist` | output directory |
@@ -52,6 +102,24 @@ arcdoq-docsite build [--corpus <dir>] [--out <dir>] [--strict]
 
 Use `--strict` in CI. Under a push model nobody reads the build log again once
 the check is green, so a warning that does not fail is a defect that ships.
+
+| `publish` | Default | |
+|---|---|---|
+| `--site` | — | the site's slug on arcdoq (required) |
+| `--dir` | `dist` | the built directory to send |
+| `--name` | the slug | display name, used only on create |
+| `--visibility` | `public` | `public` or `private`, honoured only on create |
+| `--repo` | `$GITHUB_REPOSITORY` | provenance recorded with the published version |
+| `--dry-run` | off | print exactly what would be sent, and send nothing |
+
+The token comes from `ARCDOQ_DEPLOY_TOKEN`, never a flag — a flag is visible in
+the process table and lands verbatim in shell traces, and this credential is
+long-lived. `--dry-run` needs no token, which is what makes a wiring problem
+debuggable from a local checkout.
+
+Files that arcdoq cannot serve (a stray `.md`, a `.zip`) are skipped and named
+in the output rather than dropped quietly; junk like `.DS_Store` and
+`node_modules` is dropped outright.
 
 ## What it reads
 
