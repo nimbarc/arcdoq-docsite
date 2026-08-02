@@ -77,6 +77,10 @@ code, kbd, .mono, .cite, .rule-id, .chip { font-family: 'JetBrains Mono', ui-mon
   background: var(--surface-1); color: var(--ink-3);
   border: 1px solid var(--line); border-radius: var(--radius-sm);
   font: inherit; font-size: 13px; cursor: pointer;
+  /* A link now, not a button: the search route has a URL, so the control that
+     reaches it is the thing every browser already knows how to open in a tab,
+     middle-click, and follow with JavaScript off. */
+  text-decoration: none;
   transition: border-color .16s var(--ease-quint), color .16s var(--ease-quint);
 }
 .search-open:hover { border-color: var(--line-strong); color: var(--ink-2); }
@@ -608,45 +612,56 @@ table.no-head thead { display: none; }
 .keybar .kb-state { margin-left: auto; color: var(--ink-4); }
 .keybar .kb-state b { color: var(--amber); font-weight: 600; }
 
-/* ── search ──────────────────────────────────────────────────────────────── */
+/* ── search: a page, not an overlay ──────────────────────────────────────── */
 
-.sheet {
-  position: fixed; inset: 0; z-index: 40; display: none;
-  background: color-mix(in oklch, var(--canvas) 55%, transparent);
-  backdrop-filter: blur(3px);
-  padding: 10vh 20px 20px;
+/* No fixed positioning, no scrim, no z-index, no max-height. The route is a
+   document in the normal flow, so it scrolls, prints and zooms like one. */
+.search-form { margin: 18px 0 10px; }
+.search-form input {
+  width: 100%; box-sizing: border-box;
+  background: var(--canvas-top); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 13px 15px; font: 400 16px/1.2 'Hanken Grotesk', sans-serif;
 }
-.sheet[data-open] { display: block; }
-.sheet-in {
-  max-width: 620px; margin: 0 auto;
-  background: var(--canvas-top); border: 1px solid var(--line);
-  border-radius: var(--radius-lg); box-shadow: var(--lift);
-  overflow: hidden;
+.search-form input:focus-visible {
+  outline: 2px solid var(--accent-ring); outline-offset: 1px;
+  border-color: var(--accent);
 }
-.sheet input {
-  width: 100%; border: 0; border-bottom: 1px solid var(--line-soft);
-  background: none; color: var(--ink); padding: 15px 18px;
-  font: 400 16px/1 'Hanken Grotesk', sans-serif; outline: none;
+.search-form input::placeholder { color: var(--ink-4); }
+
+/* The floor speaks for itself, and stops speaking the moment the client layer
+   reaches the end of the file — which is the one thing `data-viewer` records. */
+.search-nojs { font-size: 13px; color: var(--ink-3); margin: 0 0 12px; }
+[data-viewer='ready'] .search-nojs { display: none; }
+
+.search-count {
+  font-size: 12px; color: var(--ink-4); margin: 0 0 10px;
+  padding-bottom: 10px; border-bottom: 1px solid var(--line-soft);
 }
-.sheet input::placeholder { color: var(--ink-4); }
-.results { list-style: none; margin: 0; padding: 6px; max-height: 52vh; overflow-y: auto; }
-.results li { border-radius: 7px; }
-.results a { display: block; padding: 9px 12px; text-decoration: none; color: inherit; }
-.results li[aria-selected='true'] { background: var(--accent-fill); }
-.r-top { display: flex; align-items: baseline; gap: 9px; }
-.r-id { font: 600 11.5px/1 'JetBrains Mono', monospace; color: var(--ink-3); }
-.r-tier svg { width: 8px; height: 8px; }
-.r-tier[data-tier='confirmed'] svg { fill: var(--tier-confirmed-mark); }
-.r-tier[data-tier='unconfirmed'] svg { fill: var(--tier-unconfirmed); }
-.r-st { font-size: 14px; color: var(--ink); font-weight: 500; line-height: 1.35; margin-top: 2px; }
-.r-meta { font-size: 11px; color: var(--ink-4); margin-top: 2px; }
-.sheet-foot {
-  display: flex; gap: 16px; padding: 8px 14px; font-size: 11px;
-  color: var(--ink-4); border-top: 1px solid var(--line-soft);
+/* `main ul, main ol` holds lists to the 68ch reading measure, which is right
+   for prose and wrong here: a result row is a scan target, and holding it to
+   two thirds of the column while the box above it spans the whole width reads
+   as two different pages. */
+.search-index { list-style: none; margin: 0; padding: 0; max-width: none; }
+.search-index > li { border-bottom: 1px solid var(--line-soft); }
+.search-index > li[hidden] { display: none; }
+.search-index a {
+  display: block; padding: 11px 10px; margin: 0 -10px;
+  text-decoration: none; color: inherit; border-radius: var(--radius-sm);
 }
-.sheet-foot kbd { border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; font-size: 10px; }
-.sheet-empty { padding: 18px; font-size: 13px; color: var(--ink-3); }
-.sheet-empty code { font-size: 12px; }
+.search-index a:hover { background: var(--surface-1); }
+.s-top { display: flex; align-items: baseline; gap: 9px; }
+.s-id { font: 600 11.5px/1 'JetBrains Mono', monospace; color: var(--ink-3); }
+.s-tier svg { width: 8px; height: 8px; }
+.s-tier[data-tier='confirmed'] svg { fill: var(--tier-confirmed-mark); }
+.s-tier[data-tier='unconfirmed'] svg { fill: var(--tier-unconfirmed); }
+.s-tier[data-tier='broken'] svg { fill: var(--tier-broken, var(--ink-3)); }
+.s-tier[data-tier='neutral'] svg { fill: none; stroke: var(--ink-4); }
+.s-where { font-size: 11px; color: var(--ink-4); margin-left: auto; }
+.s-st {
+  display: block; margin-top: 3px;
+  font-size: 14px; font-weight: 500; line-height: 1.35; color: var(--ink);
+}
 
 /* ── responsive ──────────────────────────────────────────────────────────── */
 
@@ -680,6 +695,21 @@ table.no-head thead { display: none; }
   @supports selector(:has(a)) {
     .side .nav-g { display: none; }
     .side .nav-g:has(a[aria-current='page']) { display: block; }
+    /* The search route is the one page with no aria-current anywhere — it is
+       the generator's surface, not a page of the corpus, so the nav cannot
+       name it. Collapsing by `the group holding the current page` therefore
+       leaves nothing at all here. It is also the page least in need of
+       collapsing: a reader who came to browse should see every group. */
+    [data-page='search'] .side .nav-g { display: block; }
+  }
+  /* …but uncollapsed, that nav is most of a screen, and it sits above main in
+     the source order every other page wants. The box is the entire reason this
+     page exists, so on the route the column inverts: search first, then the
+     full ledger underneath it as the browse surface. */
+  [data-page='search'] main { order: -1; }
+  [data-page='search'] .side {
+    border-bottom: 0; border-top: 1px solid var(--line-soft);
+    margin: 18px 0 0; padding-top: 18px;
   }
   main { padding-top: 22px; }
 }
@@ -744,7 +774,7 @@ table.no-head thead { display: none; }
 }
 
 @media print {
-  .side, .rail, .top, .keybar, .sheet { display: none !important; }
+  .side, .rail, .top, .keybar, .search-form { display: none !important; }
   .frame { display: block; }
   .rule { break-inside: avoid; }
   /* A scroll container has nothing to scroll on paper: whatever overflows is

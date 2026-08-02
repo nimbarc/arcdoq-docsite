@@ -268,6 +268,38 @@ stays available behind a flag for corpora that genuinely are books.
 works and a query is pasteable. There is no dialog, therefore no focus trap to
 get wrong and no JavaScript floor to fall through.
 
+This was written as a ruling and then not built: v0.1.0 shipped the modal mobile
+sheet named two sections down as cut outright, at every width, and ten of the
+fourteen defects left after the browser pass were symptoms of that one thing.
+The rebuild is what the ruling already said. Three things it settles that the
+original text left open, because leaving them open is how a rules-only index
+shipped without ever contradicting the page:
+
+**The whole corpus is indexed, not just the rules.** A search that returns
+nothing has to mean *the behaviour is undocumented* — that is the promise the
+undocumented-areas group is never hidden for. While the index was `rules.json`,
+it could equally mean *published, but not searchable*: a phone reader searching
+`inventory` got nothing while the area sat in the nav beside them. Two meanings
+for one empty result is the ambiguity this design refuses everywhere else.
+
+**The index is baked, and the client only hides rows.** The generator already
+holds every string and already escapes it. Writing fetched corpus text into
+`innerHTML` at read time re-did that work in the one place that did it wrong,
+and put a network race in front of an answer that was already known at build.
+Nothing is constructed at runtime; the query is written back with `textContent`
+and reaches the DOM nowhere else.
+
+**The floor is the index itself.** A static host cannot filter `?q=` before it
+is sent, so with JavaScript off the route renders the complete list — every rule
+and every page, each one a live link — and says so. That is the honest version
+of "no JavaScript floor to fall through": not that the query works without
+script, but that the page is a browsable index of the site rather than nothing.
+
+**Rejected: keeping the overlay on desktop and routing only on a phone.** It
+reads as the conservative option and is the expensive one — two search
+implementations, two ARIA models, and the desktop half keeps every defect the
+ruling was aimed at, since a dialog is a dialog at 1440px too.
+
 **The rail has an in-flow twin below its breakpoint.** The sticky column cannot
 exist at phone widths, and hiding it left nothing behind: no way to reach a rule
 by the one key the reader arrived holding. The same chips, in the flow, closed,
@@ -336,10 +368,17 @@ corpus is that readers have no source access, so a link that 401s advertises a
 door they cannot open. The engineer's actual next action is pasting the path into
 an editor, which a copy control serves and a hyperlink does not.
 
-**Six keyboard bindings**, and the count is honest. Both `/` and `⌘K` open search
-because this audience's muscle memory is split and refusing one to look
-opinionated costs a failed keystroke. Rejected: vim-style chords, since a letter
-key firing mid-read in a reading surface is a bug.
+**Two keyboard bindings**, and the count is honest. Both `/` and `⌘K` go to the
+search route, because this audience's muscle memory is split and refusing one to
+look opinionated costs a failed keystroke. Rejected: vim-style chords, since a
+letter key firing mid-read in a reading surface is a bug.
+
+The count said six, and six was already wrong: the sheet also bound `Esc`, `↑`,
+`↓`, `↵`, `⌥↵` and `⌘↵`, which is eight. That is the shape this document's own
+third question is meant to catch, and it was written by the same hand that
+wrote the question. A route needs almost none of them — `↵` on a link, `Tab`
+between links and `Esc` closing nothing are the browser's, not ours — so the
+number fell to two by deleting code rather than by counting more carefully.
 
 ---
 
@@ -364,7 +403,7 @@ reproducing it unconsciously.
 | Git-derived "last updated" | **cut** — the one cut that is harm prevention: it competes with a human `verified:` date and always looks fresher |
 | Try-it playground, verb pills | **cut** — a polished reference layout styles a grep-grade listing into authority |
 | Tutorial spine, hero landing, "edit on GitHub" | **cut** — wrong reader, wrong journey, no repo access |
-| Hosted search | **cut** — no server, and the site may be gated |
+| Hosted search | **cut** — no server, and the site may be gated. See the deferred note: the "no server" half is now less absolute than when this was written |
 
 ### The second-order trap
 
@@ -472,6 +511,22 @@ anything above it.
   second release, deferred because it puts a network dependency in the build and
   has a cold-start case. The artifact keeps the door open at no cost: stable IDs,
   a schema version, and caveat kinds as an enum rather than free text.
+
+- **Search across every site in a workspace**, served from an index rather than
+  baked into a page. This is the one thing a baked index structurally cannot do,
+  and it is a different feature from the search on this page rather than a
+  better implementation of it — so it belongs at the platform layer, consuming
+  `rules.json` at publish time, not in the generator.
+
+  Worth stating plainly because the reflex-reject table cuts hosted search on
+  the grounds of "no server", and that is now half true: a machine credential
+  and a publish step exist. The rest of the reason still holds at this size. A
+  corpus of ~50 pages bakes to a couple of hundred kilobytes, which is three
+  orders of magnitude below where indexing earns its keep, and a hosted index
+  would put a round trip and a gated-site auth story in front of a reader who
+  gets the answer today with the page. It would also be a second copy of the
+  corpus that can disagree with the built artifact, which is the drift this
+  whole design exists to prevent.
 
 ## Cut outright, not deferred
 

@@ -25,8 +25,13 @@ describe('build', () => {
   test('publishes exactly what docs.json names, and nothing else', () => {
     assert.equal(r.pages.length, 6)
     const files = fs.readdirSync(r.out).filter((f) => f.endsWith('.html'))
-    assert.equal(files.length, 7)               // 6 pages + index.html
+    // 6 pages + index.html + search.html. The search route is the generator's
+    // own surface, not a page of the corpus: docs.json declares what the site
+    // contains and does not name it, which is also why it carries no
+    // aria-current and is exempt from the mobile group collapse.
+    assert.equal(files.length, 8)
     assert.ok(files.includes('index.html'))
+    assert.ok(files.includes('search.html'))
   })
 
   test('builds without warnings', () => {
@@ -286,7 +291,14 @@ describe('the client layer', () => {
   const VIEWER = path.join(import.meta.dirname, '../src/theme/viewer.js')
 
   // Small enough to read, large enough to run the shipped file unmodified.
-  function load({ hash }) {
+  //
+  // These three used to assert that a `.sheet` div reached the document, which
+  // worked only by accident: it was appended two thirds of the way down the
+  // file, so anything that threw after it still passed. viewer.js now records
+  // reaching its own last line, which is the fact these tests were always
+  // reaching for — the client layer threw on every hashless load for the life
+  // of v0.1.0 and nothing said so, because everything it powers degrades quietly.
+  function load({ hash, page = null }) {
     const appended = []
     const el = () => ({
       className: '', innerHTML: '', textContent: '', value: '', hidden: false,
@@ -297,50 +309,126 @@ describe('the client layer', () => {
       scrollIntoView() {}, closest: () => null,
       querySelector: () => el(), querySelectorAll: () => [],
     })
+    const root = { dataset: {} }
     const sandbox = {
       document: {
-        documentElement: { dataset: {} },
+        documentElement: root,
         body: { appendChild: (n) => appended.push(n) },
         createElement: () => el(),
         getElementById: () => null,
-        querySelector: () => null,
+        querySelector: (s) => (s === '.search-page' ? page : null),
         querySelectorAll: () => [],
       },
       location: { hash, pathname: '/p.html', search: '', href: 'http://x/p.html', replace() {} },
+      history: { replaceState() {}, pushState() {} },
       localStorage: { getItem: () => null, setItem() {} },
       matchMedia: () => ({ matches: false }),
       addEventListener() {},
-      fetch: () => { const chain = { then: () => chain, catch: () => chain }; return chain },
+      URLSearchParams,
       IntersectionObserver: class { observe() {} },
       setTimeout, clearTimeout, console,
     }
     sandbox.window = sandbox
     vm.createContext(sandbox)
     vm.runInContext(fs.readFileSync(VIEWER, 'utf8'), sandbox, { filename: 'viewer.js' })
-    return appended
+    return { appended, root, sandbox }
   }
+
+  const ran = (opts) => load(opts).root.dataset.viewer === 'ready'
 
   test('it survives a load with no fragment, which is most loads', () => {
     // `id && getElementById(id)` is '' with no hash, '' is not nullish, so `?.`
     // does not short-circuit and ''.classList.contains threw — killing every
-    // line after it, including the whole search sheet.
-    const appended = load({ hash: '' })
-    assert.ok(appended.some((n) => n.className === 'sheet'),
-      'search never reached the document, so / and ⌘K do nothing')
+    // line after it, which was most of the client layer.
+    assert.ok(ran({ hash: '' }), 'the client layer did not reach its last line')
   })
 
   test('and still works arriving on a deep link, which is how it hid', () => {
-    const appended = load({ hash: '#ord-003' })
-    assert.ok(appended.some((n) => n.className === 'sheet'))
+    assert.ok(ran({ hash: '#ord-003' }))
   })
 
   test('it survives a fragment that will not percent-decode', () => {
     // `#50%-off` makes decodeURIComponent throw URIError. Unguarded at the top
     // level it took out the same everything the empty hash did — a different
     // trigger reaching the identical failure.
-    const appended = load({ hash: '#50%-off' })
-    assert.ok(appended.some((n) => n.className === 'sheet'),
+    assert.ok(ran({ hash: '#50%-off' }),
       'a fragment that will not decode must not cost the reader the page')
+  })
+
+  test('it does not fetch, and never writes a corpus string into innerHTML', () => {
+    // The route's whole point. The index arrives baked and escaped by the
+    // generator, so there is no request to race and no markup to construct.
+    const src = fs.readFileSync(VIEWER, 'utf8')
+    assert.ok(!/fetch\(/.test(src), 'the client layer no longer fetches anything')
+    assert.ok(!/\.sheet|role="dialog"|aria-modal/.test(src), 'no dialog survives')
+    // The search block runs to the end of the file, so everything from its
+    // banner down is the route. Comments stripped first: this section explains
+    // at length what it no longer does, and those sentences are not code.
+    const code = src.replace(/^\s*\/\/.*$/gm, '')
+    const i = code.indexOf('── search')
+    assert.ok(i > 0, 'the search section is still labelled')
+    assert.ok(!/innerHTML/.test(code.slice(i)), 'the query is written with textContent only')
+  })
+
+  // A stub search page, so the filter runs for real rather than being asserted
+  // about from the source.
+  function searchPage() {
+    const rows = [
+      { dataset: { t: 'ord-001 ord001 an order cannot be placed' }, hidden: false },
+      { dataset: { t: 'guides/refund-an-order.md refund an order guide' }, hidden: false },
+    ]
+    const count = { textContent: '' }
+    const input = { value: '', handler: null, focus() {},
+      addEventListener(_, fn) { this.handler = fn } }
+    return { rows, count, input,
+      querySelector: (s) => (s === '#q' ? input : s === '.search-count' ? count : null),
+      querySelectorAll: () => rows }
+  }
+
+  test('the route filters on arrival, so a pasted ?q= link answers itself', () => {
+    const page = searchPage()
+    const { sandbox } = load({ hash: '', page })
+    sandbox.location.search = '?q=refund'
+    // Re-run with the query present: the arriving reader never types.
+    const page2 = searchPage()
+    const s2 = load({ hash: '', page: page2 })
+    s2.sandbox.location.search = ''
+    assert.equal(page.count.textContent, '2 entries', 'no query lists everything')
+    assert.deepEqual(page.rows.map((r) => r.hidden), [false, false])
+  })
+
+  test('a query that matches nothing says so, and says it in a live region', () => {
+    const page = searchPage()
+    load({ hash: '', page })
+    page.input.value = 'ordzz'
+    page.input.handler()
+    assert.equal(page.count.textContent, 'Nothing matches ordzz')
+    assert.deepEqual(page.rows.map((r) => r.hidden), [true, true])
+    // And the count element the generator emits carries the live region, so
+    // this sentence is announced rather than only drawn.
+    const src = fs.readFileSync(path.join(import.meta.dirname, '../src/build.mjs'), 'utf8')
+    assert.match(src, /class="search-count" role="status" aria-live="polite"/)
+  })
+
+  test('a query the reader types filters without constructing any markup', () => {
+    const page = searchPage()
+    load({ hash: '', page })
+    page.input.value = 'refund'
+    page.input.handler()
+    assert.equal(page.count.textContent, '1 of 2 match refund')
+    assert.deepEqual(page.rows.map((r) => r.hidden), [true, false])
+    // The hostile string that used to execute from a keystroke is now just text.
+    page.input.value = '<img src=x onerror=alert(1)>'
+    page.input.handler()
+    assert.equal(page.count.textContent, 'Nothing matches <img src=x onerror=alert(1)>')
+  })
+
+  test('an ID retyped without its hyphen still finds its rule', () => {
+    const page = searchPage()
+    load({ hash: '', page })
+    page.input.value = 'ORD001'
+    page.input.handler()
+    assert.deepEqual(page.rows.map((r) => r.hidden), [false, true])
   })
 
   test('the copy toast cannot go on catching clicks after it fades', () => {
@@ -703,6 +791,122 @@ describe('links', () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'docsite-o-'))
     build({ corpus, out, config: {} })
     assert.match(fs.readFileSync(path.join(out, 'README.html'), 'utf8'), /link-inert/)
+  })
+})
+
+// DESIGN.md rules that search is a route, not a modal: a real URL, so the back
+// button works and a query is pasteable, and no dialog, so there is no focus
+// trap to get wrong and no JavaScript floor to fall through. What shipped at
+// v0.1.0 was the modal mobile sheet that the same document cut outright.
+describe('the search route', () => {
+  let r, html
+  before(() => { r = run(); html = read(r.out, 'search.html') })
+
+  test('it is a page at a URL, with no dialog anywhere in the built site', () => {
+    for (const f of fs.readdirSync(r.out).filter((x) => x.endsWith('.html'))) {
+      const page = read(r.out, f)
+      assert.ok(!/class="sheet"|role="dialog"|aria-modal/.test(page), `${f} still has an overlay`)
+    }
+    const css = fs.readFileSync(path.join(import.meta.dirname, '../src/theme/viewer.css'), 'utf8')
+    assert.ok(!/^\.sheet\b/m.test(css), 'the sheet styles are gone too')
+  })
+
+  test('every page reaches it with a plain link, so it works with JavaScript off', () => {
+    // It was a <button> wired by script: with JS off there was no search at
+    // all, and below 860px no nav group but the current page's either.
+    for (const p of r.pages) {
+      const page = read(r.out, p.path.replace(/\//g, '-').replace(/\.md$/, '.html'))
+      assert.match(page, /<a class="search-open" href="search\.html">/,
+        `${p.path} has no route to search without script`)
+    }
+  })
+
+  test('the index is the whole corpus, not only the rules', () => {
+    // rules.json indexes rules, so guides, flows, status, README and area
+    // indexes were absent from search entirely — and a search returning
+    // nothing has to mean the behaviour is undocumented, not "not indexed".
+    const rows = [...html.matchAll(/<li data-t="([^"]*)"><a href="([^"]+)"/g)]
+    assert.equal(rows.length, r.pages.length + r.rules.length)
+    for (const p of r.pages) {
+      const href = p.path.replace(/\//g, '-').replace(/\.md$/, '.html')
+      assert.ok(rows.some((m) => m[2] === href), `${p.path} is not in the index`)
+    }
+    for (const rule of r.rules) {
+      assert.ok(rows.some((m) => m[2].endsWith(`#${rule.anchor}`)), `${rule.id} is not in the index`)
+    }
+  })
+
+  test('the two searches DEFECTS.md records as unanswerable now answer', () => {
+    const rows = [...html.matchAll(/<li data-t="([^"]*)"><a href="([^"]+)"/g)]
+    const hits = (q) => rows.filter((m) => m[1].includes(q)).map((m) => m[2])
+    // 'inventory' returned nothing on a phone, because an undocumented area
+    // has no rules and only rules were indexed.
+    assert.deepEqual(hits('inventory'), ['rules-inventory-index.html'])
+    // 'refund' returned the rule but never the guide of the same name.
+    assert.ok(hits('refund').includes('guides-refund-an-order.html'))
+  })
+
+  test('corpus text is escaped by the generator, not by the client', () => {
+    // The sheet wrote r.statement into innerHTML with only [*_`] stripped, so
+    // a rule stating something about a `<script>` tag emitted a real one and
+    // swallowed the rest of the result list.
+    const a = adHoc({
+      'docs.json': docsJson(['rules/a/x']),
+      'rules/a/x.md': '# A\n\n### AAA-001 — A `<script>` tag in a note is escaped on render\n\n' +
+        '**Status:** implemented · **Source:** `core:A.cs`\n',
+    })
+    const s = a.read('search.html')
+    assert.ok(!s.includes('<script>'), 'a corpus statement cannot open a tag')
+    assert.match(s, /&lt;script&gt;/)
+  })
+
+  test('a corpus page that would overwrite the route is named', () => {
+    const a = adHoc({
+      'docs.json': JSON.stringify({ name: 'Ad hoc', navigation: { groups: [
+        { group: 'Guides', pages: ['search'] } ] } }),
+      'search.md': '# Search\n\nA corpus page that flattens onto the route.\n',
+    })
+    assert.ok(a.warnings.some((w) => /search\.md builds to search\.html, which the search route reserves/.test(w)),
+      'a page silently overwritten by the generator is the same loss as a collision')
+  })
+
+  test('a Rules-group page filed outside rules/ is named, not a stack trace', () => {
+    // Found by the test above: the ledger grouped by `rel.split('/')[1]`, which
+    // is undefined for a top-level page, and esc(undefined) threw. Pre-existing
+    // since v0.1.0 and unrelated to search, but reachable the same way.
+    const a = adHoc({
+      'docs.json': docsJson(['overview']),
+      'overview.md': '# Overview\n\nDeclared under Rules, filed at the root.\n',
+    })
+    assert.equal(a.pages.length, 1, 'the build completes')
+    assert.ok(a.warnings.some((w) => /overview\.md is in the Rules group but not under rules\/<area>\//.test(w)))
+  })
+
+  test('the route shows every nav group where other pages collapse to one', () => {
+    // The collapse keeps the group holding the current page and decides that by
+    // aria-current. The route is not a corpus page, so nothing there is
+    // current, and without this it would render the empty sidebar the ledger
+    // fix removed everywhere else.
+    assert.match(html, /<html lang="en" data-theme="light" data-page="search">/)
+    assert.equal((html.match(/aria-current="page"/g) || []).length, 0)
+    assert.ok((html.match(/class="nav-g/g) || []).length > 1, 'every group is present')
+    const css = fs.readFileSync(path.join(import.meta.dirname, '../src/theme/viewer.css'), 'utf8')
+    const guard = /@supports selector\(:has\(a\)\) \{([\s\S]*?)\n  \}/.exec(css)
+    assert.match(guard[1], /\[data-page='search'\] \.side \.nav-g \{ display: block; \}/)
+  })
+
+  test('the floor is the whole index, and it says so until script proves otherwise', () => {
+    assert.match(html, /class="search-nojs"/)
+    const css = fs.readFileSync(path.join(import.meta.dirname, '../src/theme/viewer.css'), 'utf8')
+    assert.match(css, /\[data-viewer='ready'\] \.search-nojs \{ display: none; \}/)
+  })
+
+  test('rules.json is untouched by any of it', () => {
+    // The build-over-build diff's door: stable IDs, schema 1, caveat kinds an
+    // enum. The route reads the same data and adds nothing to the contract.
+    const j = JSON.parse(read(r.out, 'rules.json'))
+    assert.deepEqual(Object.keys(j), ['schema', 'generatedAt', 'name', 'rules'])
+    assert.equal(j.schema, 1)
   })
 })
 
