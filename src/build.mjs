@@ -818,12 +818,88 @@ ${renderRailFlow(page)}
 ${body}` }
 }
 
+/* ── the search route ────────────────────────────────────────────────────── */
+
+// Not a dialog. A real page at a real URL, so a query is pasteable, the back
+// button leaves it, and there is no focus trap to get wrong — which is what
+// DESIGN.md rules and what the modal sheet could not deliver.
+//
+// Every rule and every page is BAKED IN as a live link, escaped by the same
+// esc() as every other surface in the generator. The client layer therefore
+// never constructs markup and never fetches: it hides rows that do not match,
+// and writes its one piece of feedback with textContent. The escaping bug, the
+// pre-fetch race and the stale combobox ARIA all stop being possible rather
+// than being fixed carefully.
+//
+// The index is the whole corpus, not just the rules. A search that returns
+// nothing has to mean the behaviour is undocumented; while guides, flows and
+// area indexes were absent from the index, it could also mean "published, but
+// not searchable", and the reader could not tell those apart.
+//
+// With JavaScript off the complete list is still here and every entry is still
+// a link, so the floor is a browsable index of the site rather than nothing.
+function renderSearchPage(pages, ruleIndex) {
+  const titleOf = Object.fromEntries(pages.map((p) => [p.relPath, p.title || p.relPath]))
+  const kindOf = (rel) => rel.startsWith('rules/') ? 'Rule'
+    : rel.startsWith('flows/') ? 'Flow'
+    : rel.startsWith('guides/') ? 'Guide' : 'Page'
+
+  // Every row carries the same two slots, so the list scans as one column
+  // rather than as two shapes: a key on the left — the ID a reader arrived
+  // holding, or the content type when there is no ID — and where it lives on
+  // the right, the same place the nav ledger puts its count.
+  //
+  // data-t is the only thing the filter reads: one lowercased haystack per row,
+  // built here, where the strings already are and where esc() already runs.
+  const row = ({ href, key, tier, headline, where, terms }) =>
+    `<li data-t="${esc(terms.filter(Boolean).join(' ').toLowerCase())}"><a href="${esc(href)}">` +
+    `<span class="s-top"><span class="s-id">${esc(key)}</span>` +
+    `${tier ? `<span class="s-tier" data-tier="${tier}">${TIER_MARK[tier]}</span>` : ''}` +
+    `<span class="s-where">${esc(where)}</span></span>` +
+    `<span class="s-st">${esc(headline)}</span></a></li>`
+
+  const plain = (s) => String(s ?? '').replace(/[*_`]/g, '')
+
+  const ruleRows = Object.values(ruleIndex).map((r) => row({
+    href: `${htmlName(r.page)}#${r.anchor}`,
+    key: r.id, tier: r.vocab.tier,
+    headline: plain(r.statement),
+    where: titleOf[r.page] || r.page,
+    // `ord001` alongside `ORD-001`, because a reader retyping an ID out of a
+    // ticket drops the hyphen as often as not.
+    terms: [r.id, r.id.replace('-', ''), plain(r.statement),
+      ...r.meta.tests.map((t) => t.name), ...r.meta.sources.map((s) => s.path),
+      titleOf[r.page]],
+  }))
+
+  const pageRows = pages.map((p) => row({
+    href: htmlName(p.relPath), key: kindOf(p.relPath), tier: null,
+    headline: p.title || p.relPath,
+    where: p.relPath,
+    terms: [p.title, p.relPath, p.data.area, kindOf(p.relPath)],
+  }))
+
+  const n = ruleRows.length + pageRows.length
+  return `<div class="search-page">
+<h1>Search</h1>
+<form class="search-form" role="search" method="get" action="search.html">
+  <input id="q" name="q" type="search" value="" autocomplete="off" autofocus
+    aria-label="Search this corpus"
+    placeholder="A rule ID, a behaviour, a test name, a path, a page">
+</form>
+<p class="search-nojs">JavaScript is off, so the box above cannot filter. The
+complete index is below: every rule and every page, each one a link.</p>
+<p class="search-count" role="status" aria-live="polite">${n} entries</p>
+<ol class="search-index">${ruleRows.join('')}${pageRows.join('')}</ol>
+</div>`
+}
+
 /* ── shell ───────────────────────────────────────────────────────────────── */
 
 const hasCustomCss = fs.existsSync(path.join(CORPUS, 'docs.css'))
-function shell({ title, main, rail, nav, accent }) {
+function shell({ title, main, rail, nav, accent, page = '' }) {
   return `<!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="light"${page ? ` data-page="${page}"` : ''}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -843,10 +919,10 @@ ${hasCustomCss ? '<link rel="stylesheet" href="docs.css">' : ''}
   <div class="top-in">
     <a class="mark" href="index.html"><span class="mark-dot"></span>${esc(config.name)}</a>
     <div class="top-r">
-      <button class="search-open" type="button" aria-label="Search">
+      <a class="search-open" href="search.html">
         <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.4" fill="none" stroke-width="1.7"/><path d="M10.4 10.4 14 14" stroke-width="1.7" fill="none" stroke-linecap="round"/></svg>
         <span>Search</span><kbd>/</kbd>
-      </button>
+      </a>
       <button class="theme" type="button" aria-label="Switch to dark theme" aria-pressed="false">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.2 9.6A5.6 5.6 0 0 1 6.4 2.8 5.6 5.6 0 1 0 13.2 9.6Z"/></svg>
       </button>
@@ -887,9 +963,16 @@ function renderNav(pages, current) {
   const rulesLedger = (paths) => {
     const areas = new Map()
     for (const rel of paths) {
+      // A page declared in the Rules group but not filed under `rules/<area>/`
+      // has no area segment to group by. `rel.split('/')[1]` was undefined for
+      // it, which reached esc(undefined) and took the whole build down — a
+      // corpus arrangement the generator does not support is a thing to name,
+      // not a stack trace. It groups under its own path instead.
       const dir = rel.split('/')[1]
-      if (!areas.has(dir)) areas.set(dir, [])
-      areas.get(dir).push(rel)
+      if (!dir) warn(`${rel} is in the Rules group but not under rules/<area>/`)
+      const key = dir || rel.replace(/\.md$/, '')
+      if (!areas.has(key)) areas.set(key, [])
+      areas.get(key).push(rel)
     }
     return [...areas].map(([dir, rels]) => {
       const topics = rels.filter((r) => !r.endsWith('index.md'))
@@ -948,6 +1031,10 @@ const pages = config.publish.map(buildPage)
 const byFile = new Map()
 for (const rel of config.publish) {
   const f = htmlName(rel)
+  // The search route owns one filename. A corpus page that flattens onto it
+  // would be overwritten by a file it never asked for, which is the same silent
+  // loss as a collision between two corpus pages and is reported the same way.
+  if (f === 'search.html') warn(`${rel} builds to search.html, which the search route reserves`)
   if (byFile.has(f)) warn(`${rel} and ${byFile.get(f)} both build to ${f}`)
   else byFile.set(f, rel)
 }
@@ -1049,6 +1136,15 @@ for (const p of pages) {
   warn(`${p.relPath} declares area: "${p.data.area}", which matches no areaLabels key, ` +
        `while its directory "${m[1]}" does — the nav and the page will disagree`)
 }
+
+// The search route is built like any other page and is deliberately NOT in
+// docs.json's nav: docs.json declares what the CORPUS contains, and this is the
+// generator's own surface. It is reached by the header control, by `/` and by
+// ⌘K, all three of which are a plain link or a navigation to it.
+fs.writeFileSync(path.join(OUT, 'search.html'), shell({
+  title: 'Search', main: renderSearchPage(pages, ruleIndex), rail: '',
+  nav: renderNav(pages, null), accent: config.accent, page: 'search',
+}))
 
 // rules.json — the machine surface the MCP queries.
 fs.writeFileSync(path.join(OUT, 'rules.json'), JSON.stringify({

@@ -87,6 +87,39 @@ diff needs is still open at no cost.
 
 ## 1. Search — one rebuild, not ten patches
 
+**Done.** Search is a route. Everything below is kept as the record of what was
+wrong and why one rebuild was the answer rather than ten patches; nothing in it
+is outstanding. What closed, and how:
+
+- **Seven closed by construction.** No overlay exists, so there is no focus
+  trap, no `inert` to forget, no `close()` to restore focus from, and no sheet
+  left covering a same-page result. No combobox exists, so `aria-expanded` and
+  `aria-activedescendant` cannot go stale; the result count is a live region and
+  is the only thing that speaks. No fetch exists, so there is no pre-fetch race
+  and no swallowed `.catch`. Nothing is built from a string at read time, so the
+  escaping hole is gone — the generator escapes the index with the same `esc()`
+  as every other surface, and the query is written back with `textContent`.
+
+- **Two closed by removing the feature, which is not the same as fixing it.**
+  The result list's `⌥↵` copy-link binding wrote a bare `text/plain` URL and
+  then flashed *Link copied*, and it read `navigator.clipboard` without the
+  guard the permalink path has. Both are gone because the binding is gone. A
+  reader who wants a rule's link now follows the result to the rule and uses the
+  ID, which is the control `DESIGN.md` names for it and the one that honours the
+  dual-MIME ruling. That is a deliberate loss of one keystroke, not an
+  oversight.
+
+- **One thing improved that this was not aimed at.** The `<=860px` collapse
+  below is unchanged, but its dead end is not: every page's header now carries a
+  plain `<a href="search.html">`, the route shows every nav group, and the index
+  covers pages as well as rules. Searching `inventory` on a phone returns the
+  inventory area index instead of *Nothing matches* — the exact failure recorded
+  under *the gap group is hidden on every mobile page except its own*.
+
+The original write-up follows.
+
+---
+
 Ten of the fourteen are symptoms of a single thing: search shipped as the
 JS-only modal that `DESIGN.md` **cut outright**, and was never built to the spec
 that is already written down there:
@@ -638,7 +671,12 @@ subgrid) to 53.4px, the width of its own text. Visible position is unchanged.
 This is a fix — 130px of invisible margin used to copy a permalink and fire a
 toast when clicked — but it is a change, and it was not asked for.
 
-**`DESIGN.md` still contradicts the shipped search.** Its "Cut outright, not
-deferred" list names *the modal mobile sheet*, which is what search is. Either
-the code or that line has to move; the audit is why it is worth deciding
-deliberately rather than quietly editing the list.
+**`DESIGN.md` no longer contradicts the shipped search — the code moved.** The
+"Cut outright, not deferred" list still names *the modal mobile sheet*, and that
+line is untouched, because it was never the thing that was wrong. `DESIGN.md`
+and its own cut list agreed with each other the whole time; only `viewer.js`
+disagreed with both. What did have to change there was smaller and elsewhere:
+the ruling now states what the index covers and what the JavaScript-off floor
+actually is, since leaving those unsaid is how a rules-only index shipped
+without ever contradicting the page. And the keyboard count moved from six to
+two — six was already wrong when it was written, because the sheet bound eight.

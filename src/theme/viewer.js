@@ -156,129 +156,61 @@
     io.observe(key)
   }
 
-  /* ── search ────────────────────────────────────────────────────────────── */
-  const sheet = document.createElement('div')
-  sheet.className = 'sheet'
-  sheet.innerHTML = `<div class="sheet-in">
-    <input type="text" role="combobox" aria-expanded="false" aria-controls="sr"
-      aria-autocomplete="list" placeholder="Search rules, statements, test names, paths">
-    <ul class="results" id="sr" role="listbox" aria-label="Results"></ul>
-    <div class="sheet-foot"><span><kbd>↑</kbd><kbd>↓</kbd> move</span>
-      <span><kbd>↵</kbd> open</span><span><kbd>⌥↵</kbd> copy link</span>
-      <span><kbd>esc</kbd> close</span></div>
-  </div>`
-  document.body.appendChild(sheet)
-  const input = sheet.querySelector('input')
-  const list = sheet.querySelector('.results')
-  let rules = []
-  let sel = 0
+  /* ── search: a route, so almost nothing happens here ───────────────────── */
+  // What this used to be — a fixed overlay built in script, filled by writing
+  // fetched corpus text into innerHTML, driven by a hand-rolled combobox — is
+  // gone. Search is a page now. The whole index is baked into search.html by
+  // the generator, escaped there like every other surface, so the only thing
+  // left to do on the client is hide the rows that do not match.
+  const searchPage = document.querySelector('.search-page')
+  const input = searchPage && searchPage.querySelector('#q')
+  if (searchPage && input) {
+    const rows = [...searchPage.querySelectorAll('.search-index > li')]
+    const count = searchPage.querySelector('.search-count')
 
-  let examples = null
-  fetch('rules.json').then((r) => r.json()).then((d) => {
-    rules = d.rules
-    // Examples are drawn from the corpus that is actually loaded, so the empty
-    // state teaches the grammar using IDs and paths the reader will recognise.
-    const first = rules[0]
-    if (first) {
-      const src = first.sources?.[0]?.path || ''
-      examples = {
-        id: first.id,
-        words: first.statement.toLowerCase().replace(/[^a-z ]/g, '').split(/\s+/)
-          .filter((w) => w.length > 4).slice(0, 2).join(' '),
-        path: src.split('/').pop() || '',
+    const apply = (raw) => {
+      const q = raw.trim()
+      const t = q.toLowerCase()
+      let n = 0
+      for (const li of rows) {
+        const hit = !t || li.dataset.t.includes(t)
+        li.hidden = !hit
+        if (hit) n++
       }
+      // textContent, never innerHTML. The query is the one string on this page
+      // the reader controls, and this is the only place it is written back out.
+      // The count is also the only feedback the filter gives, so it is the live
+      // region: "nothing matches" has to be announced, not merely drawn.
+      count.textContent = !t ? `${rows.length} entries`
+        : n ? `${n} of ${rows.length} match ${q}`
+        : `Nothing matches ${q}`
+      // replaceState, not pushState: a query is worth having in the URL so it
+      // can be pasted, but one history entry per keystroke would make Back walk
+      // the query backwards a letter at a time instead of leaving the page.
+      history.replaceState(null, '',
+        q ? location.pathname + '?q=' + encodeURIComponent(q) : location.pathname)
     }
-  }).catch(() => {})
 
-  const TIER = {
-    confirmed: '<svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="2.2"/></svg>',
-    unconfirmed: '<svg viewBox="0 0 10 10"><path d="M5 1.3 8.9 8.4H1.1Z"/></svg>',
-    broken: '<svg viewBox="0 0 10 10"><rect x="1.4" y="1.4" width="7.2" height="7.2" rx="1.2"/></svg>',
-    neutral: '<svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="2.2" fill="none" stroke-width="1.4"/></svg>',
-  }
-  const pageFile = (p) => p.replace(/\//g, '-').replace(/\.md$/, '.html')
-
-  function search(q) {
-    const t = q.trim().toLowerCase()
-    if (!t) return []
-    // The ID fast path: typing a rule ID is a different question from typing
-    // "bounce", and the reader arrived holding the ID.
-    const exact = rules.filter((r) => r.id.toLowerCase() === t ||
-      r.id.toLowerCase().replace('-', '') === t.replace('-', ''))
-    const rest = rules.filter((r) => !exact.includes(r) && (
-      r.id.toLowerCase().includes(t) ||
-      r.statement.toLowerCase().includes(t) ||
-      r.tests.some((x) => x.name.toLowerCase().includes(t)) ||
-      r.sources.some((x) => x.path.toLowerCase().includes(t))))
-    return [...exact, ...rest].slice(0, 12)
+    // An arriving ?q= is the pasteable case, and it must filter on load rather
+    // than wait for a keystroke that a linked-to reader never makes.
+    const arrived = new URLSearchParams(location.search).get('q')
+    if (arrived) input.value = arrived
+    apply(input.value)
+    input.addEventListener('input', () => apply(input.value))
   }
 
-  function render(q) {
-    const hits = search(q)
-    sel = 0
-    if (!q.trim()) {
-      const bits = []
-      if (examples?.id) bits.push(`a rule ID (<code>${examples.id}</code>)`)
-      if (examples?.words) bits.push(`a behaviour (<code>${examples.words}</code>)`)
-      if (examples?.path) bits.push(`a path (<code>${examples.path}</code>)`)
-      list.innerHTML = `<li class="sheet-empty">${bits.length
-        ? 'Try ' + bits.join(', ') + '.'
-        : 'Search rule IDs, statements, test names and source paths.'}</li>`
-      input.setAttribute('aria-expanded', 'false')
-      return
-    }
-    if (!hits.length) {
-      list.innerHTML = `<li class="sheet-empty">Nothing matches <strong>${q}</strong>.</li>`
-      return
-    }
-    input.setAttribute('aria-expanded', 'true')
-    list.innerHTML = hits.map((r, i) => `<li role="option" id="o${i}"
-      aria-selected="${i === 0}"><a href="${pageFile(r.page)}#${r.anchor}">
-      <span class="r-top"><span class="r-id">${r.id}</span>
-      <span class="r-tier" data-tier="${r.tier}">${TIER[r.tier]}</span>
-      <span class="r-meta">${r.caveats.map((c) => c.text).join(' · ') || ''}</span></span>
-      <span class="r-st">${r.statement.replace(/[*_`]/g, '')}</span></a></li>`).join('')
-    input.setAttribute('aria-activedescendant', 'o0')
-  }
-
-  const open = () => {
-    sheet.dataset.open = ''
-    input.value = ''
-    render('')
-    input.focus()
-  }
-  const close = () => { delete sheet.dataset.open; input.blur() }
-
-  document.querySelector('.search-open')?.addEventListener('click', open)
-  input.addEventListener('input', () => render(input.value))
-  sheet.addEventListener('click', (e) => { if (e.target === sheet) close() })
-
+  // Both bindings survive the reshape because neither was ever about a dialog:
+  // they go to the route, or focus the box if the route is already open.
   addEventListener('keydown', (e) => {
-    const typing = /^(INPUT|TEXTAREA)$/.test(e.target.tagName)
-    if (!typing && (e.key === '/' || ((e.metaKey || e.ctrlKey) && e.key === 'k'))) {
-      e.preventDefault(); open(); return
-    }
-    if (!('open' in sheet.dataset)) return
-    const opts = [...list.querySelectorAll('[role="option"]')]
-    if (e.key === 'Escape') { e.preventDefault(); close() }
-    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      if (!opts.length) return
-      e.preventDefault()
-      sel = (sel + (e.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length
-      opts.forEach((o, i) => o.setAttribute('aria-selected', String(i === sel)))
-      input.setAttribute('aria-activedescendant', 'o' + sel)
-      opts[sel].scrollIntoView({ block: 'nearest' })
-    } else if (e.key === 'Enter' && opts[sel]) {
-      const a = opts[sel].querySelector('a')
-      if (e.altKey) {
-        e.preventDefault()
-        const url = new URL(a.getAttribute('href'), location.href).href
-        navigator.clipboard.writeText(url).then(() => flash(input, 'Link copied')).catch(() => {})
-        return
-      }
-      e.preventDefault()
-      if (e.metaKey || e.ctrlKey) window.open(a.href, '_blank')
-      else location.href = a.href
-    }
+    if (/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return
+    if (e.key !== '/' && !((e.metaKey || e.ctrlKey) && e.key === 'k')) return
+    e.preventDefault()
+    if (input) input.focus()
+    else location.href = 'search.html'
   })
+
+  // The client layer completing is worth one observable fact. It threw on every
+  // load without a fragment for the life of v0.1.0 and nothing said so, because
+  // everything it powers degrades quietly by design.
+  root.dataset.viewer = 'ready'
 })()
