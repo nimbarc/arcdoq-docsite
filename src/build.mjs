@@ -90,6 +90,56 @@ const config = { ...defaults, ...overrides,
 const warnings = []
 const warn = (m) => { if (!warnings.includes(m)) warnings.push(m) }
 
+/* ── area labels: one declared entry, read from three key spaces ─────────── */
+
+// This map was read through three keys that never agreed. The nav label and the
+// ledger key on the `rules/<dir>/` directory name; the page warrant keys on the
+// page's own `area:` frontmatter, which is a human string the corpus wrote
+// ("AuthOrganizations"), not a directory. Nothing normalised between them, and
+// docs.config.example.json teaches the hyphenated directory spelling — so for
+// every multi-word area the nav showed the declared label and the warrant
+// silently showed the raw folder name, which is the one thing this map exists
+// to suppress. The build looked entirely correct while doing it, which is the
+// worst shape a defect can take here.
+//
+// One canonical key now serves all three sites: `auth-organizations`,
+// `AuthOrganizations` and `Auth Organizations` are the same area, and no corpus
+// has to declare a key twice to be found by both spellings.
+const areaKey = (s) => String(s ?? '')
+  .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')   // an ASCII dir finds an accented area
+  .toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')  // case and separators carry no meaning
+
+const areaByKey = new Map()
+const areaSeen = new Set()          // declared keys that resolved, or were already named
+for (const [declared, label] of Object.entries(config.areaLabels)) {
+  const k = areaKey(declared)
+  // Nothing but punctuation collapses to the empty key, which would then be the
+  // answer for every page whose `area:` is missing or equally empty.
+  if (!k) {
+    warn(`areaLabels key "${declared}" has no letters or digits to key on`)
+    areaSeen.add(declared)
+    continue
+  }
+  const prior = areaByKey.get(k)
+  // Same precedent as the duplicate rule ID below: the first declaration wins
+  // and the clash is named, rather than resolving to whichever came last.
+  if (prior) {
+    warn(`areaLabels declares both "${prior.declared}" and "${declared}" for the ` +
+         `same area; "${prior.declared}" wins`)
+    areaSeen.add(declared)
+    continue
+  }
+  areaByKey.set(k, { declared, label })
+}
+
+// Returns null rather than the input, so each call site keeps its own fallback.
+const areaLabel = (s) => {
+  const hit = areaByKey.get(areaKey(s))
+  if (!hit) return null
+  areaSeen.add(hit.declared)
+  return hit.label
+}
+
 // Claim counts are accumulated by the renderer itself, never by a second scan
 // of the source. Two counts that can disagree is the drift failure this whole
 // corpus exists to prevent, and the strip would be the thing telling the lie.
@@ -721,7 +771,9 @@ function renderPage(page, ctx) {
   const kind = page.relPath.startsWith('rules/') ? 'Rule'
     : page.relPath.startsWith('flows/') ? 'Flow'
     : page.relPath.startsWith('guides/') ? 'Guide' : 'Page'
-  const area = config.areaLabels[page.data.area?.toLowerCase()] || page.data.area || ''
+  // Keyed on the page's own `area:` frontmatter, which is the corpus's human
+  // spelling of an area the nav keys on by directory. Both go through areaKey.
+  const area = areaLabel(page.data.area) || page.data.area || ''
 
   const dist = page.rules.length
     ? Object.entries(page.rules.reduce((a, r) => {
@@ -809,7 +861,8 @@ function renderNav(pages, current) {
   // The short label often exists nowhere in the corpus; it is derived.
   const label = (rel) => {
     const area = /^rules\/([^/]+)\/index\.md$/.exec(rel)
-    if (area && config.areaLabels[area[1]]) return config.areaLabels[area[1]]
+    const declared = area && areaLabel(area[1])
+    if (declared) return declared
     const pg = byPath[rel]
     if (!pg) return rel
     const dash = pg.title.indexOf(' — ')
@@ -845,7 +898,7 @@ function renderNav(pages, current) {
       // is published, reachable and yet named nowhere in the nav — and because
       // the mobile nav shows only the group holding the current page, and that
       // is decided by aria-current, arriving there rendered an empty sidebar.
-      const name = esc(config.areaLabels[dir] || dir)
+      const name = esc(areaLabel(dir) || dir)
       const head = index
         ? `<a href="${htmlName(index)}"${
             index === current ? ' aria-current="page"' : ''}>${name}</a>`
@@ -946,6 +999,18 @@ for (const page of pages) {
     nav: renderNav(pages, page.relPath), accent: config.accent,
   })
   fs.writeFileSync(path.join(OUT, htmlName(page.relPath)), out)
+}
+
+// Every page has now asked for every label it wanted, so a key nothing asked
+// for is a key the corpus spells some other way — and the pages of that area
+// are rendering the raw directory or the raw frontmatter string in the slot
+// this map exists to fill. That failure is invisible in the output, so the only
+// place it can be caught is here; --strict then turns it into a red check
+// instead of a green build with the wrong name in it.
+for (const declared of Object.keys(config.areaLabels)) {
+  if (!areaSeen.has(declared)) {
+    warn(`areaLabels declares "${declared}" but no area in the corpus resolves to it`)
+  }
 }
 
 // rules.json — the machine surface the MCP queries.
