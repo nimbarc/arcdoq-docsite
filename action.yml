@@ -1,0 +1,85 @@
+name: Build a docs site
+description: Turns a markdown corpus into a finished self-contained static site.
+author: arcdoq
+
+# Referencing this action at a tag pins the GENERATOR to the same tag, because
+# the run step installs `github.action_ref`. One version, one line, and a
+# consumer needs no package.json, no lockfile and no dependency of their own.
+#
+#   - uses: nimbarc/arcdoq-docsite@v0.1.0
+#
+# Bumping the tag in the workflow is the whole upgrade path. That is the same
+# argument as the package itself: a fork freezes, a version moves.
+
+inputs:
+  corpus:
+    description: Directory holding docs.json.
+    required: false
+    default: '.'
+  out:
+    description: Output directory for the built site.
+    required: false
+    default: dist
+  strict:
+    description: >-
+      Fail the job on any build warning. On by default, and worth leaving on:
+      under a push model nobody reads the build log again once the check is
+      green, so a warning that does not fail is a defect that ships.
+    required: false
+    default: 'true'
+  node-version:
+    description: Node version to build with.
+    required: false
+    default: '20'
+  upload-artifact:
+    description: Upload the built site as a workflow artifact.
+    required: false
+    default: 'true'
+  artifact-name:
+    description: Name of the uploaded artifact.
+    required: false
+    default: docs-site
+
+outputs:
+  out:
+    description: Path to the built site.
+    value: ${{ inputs.out }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Build
+      shell: bash
+      env:
+        # A composite action can be referenced by tag, branch or SHA. Whichever
+        # it is, the generator comes from the same ref, so the action and the
+        # code it runs can never drift apart.
+        REF: ${{ github.action_ref || 'main' }}
+      run: |
+        set -euo pipefail
+        args=(build --corpus "${{ inputs.corpus }}" --out "${{ inputs.out }}")
+        if [ "${{ inputs.strict }}" = "true" ]; then args+=(--strict); fi
+        npx --yes "github:nimbarc/arcdoq-docsite#${REF}" "${args[@]}"
+
+    - name: Upload
+      if: ${{ inputs.upload-artifact == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.out }}
+
+# Publishing is deliberately NOT a step here.
+#
+# arcdoq's publish_site is an MCP tool behind an opaque OAuth access token that
+# expires and is issued through an interactive flow. There is no machine
+# credential, so a publish step would have nothing to authenticate with and
+# would fail at the first run. Shipping one that "works" by holding a
+# hand-pasted token that silently expires is worse than shipping none.
+#
+# When the machine credential exists, publishing becomes a step in THIS file and
+# every consumer gets it by bumping the tag they already reference. That is the
+# reason to use the action rather than copying its steps into your own workflow.

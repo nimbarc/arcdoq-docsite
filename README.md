@@ -10,6 +10,25 @@ Point it at a directory holding a `docs.json` and it emits a site.
 npx arcdoq-docsite build
 ```
 
+## In CI
+
+The whole consumer workflow, with no `package.json` and no dependency of their
+own:
+
+```yaml
+- uses: actions/checkout@v4
+- uses: nimbarc/arcdoq-docsite@v0.1.0
+  with:
+    corpus: .
+```
+
+Referencing the action at a tag pins the generator to the same tag, so one line
+carries one version and bumping it is the entire upgrade path.
+
+Publishing is deliberately not a step in that action yet; see `action.yml` for
+why. When it becomes one, consumers get it by bumping the tag they already
+reference, which is the reason to use the action rather than copying its steps.
+
 ## Install
 
 ```bash
