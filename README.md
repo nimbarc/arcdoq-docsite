@@ -47,12 +47,21 @@ sees your repo.
 the action only builds, exactly as it did before — so bumping the tag can never
 start publishing something you did not ask it to.
 
-**Only your default branch publishes.** A docs repo usually runs
-`on: [push, pull_request]`, and a pull request from a branch in the same repo
-does receive secrets — so without this, opening a PR would put that branch's
-docs into production. Runs on any other ref say so and skip. Point it elsewhere
-with `publish-branch: release`, or pass `publish-branch: "*"` if you genuinely
-want every branch to publish.
+**Only your default branch publishes, and only from a trusted trigger.** A docs
+repo usually runs `on: [push, pull_request]`, and a pull request from a branch in
+the same repo does receive secrets — so without this, opening a PR would put that
+branch's docs into production. Runs on any other ref say so and skip. Point it
+elsewhere with `publish-branch: release`, or pass `publish-branch: "*"` if you
+genuinely want every branch to publish.
+
+The branch check alone is not enough, so publishing also requires the event to be
+`push`, `schedule`, `workflow_dispatch` or `release`. `pull_request_target` and
+`workflow_run` report your *default branch* as the ref while running a pull
+request's head — and `pull_request_target` deliberately delivers secrets to fork
+PRs — so a branch check by itself would let an outside contributor's markdown
+publish to production. `merge_group` is excluded for the same reason: a merge
+queue runs code that has not landed. If you need one of these, say so rather than
+working around it; the allowlist is the point.
 
 **The slug is the key.** Every run deploys to the site named by `site`, so
 nothing is stored between runs and no id is ever committed back into your repo.

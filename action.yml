@@ -77,11 +77,16 @@ inputs:
 
       This defaults to safe because a docs repo typically runs
       `on: [push, pull_request]`, and without it a pull request from a same-repo
-      branch would put that branch's docs into production. Pull requests from
-      FORKS are already safe by accident of the token gate — GitHub withholds
-      secrets from them, so the token arrives empty and publishing skips — but
-      same-repo branches do get secrets, and that is the common case for a docs
-      corpus where everyone is a collaborator.
+      branch would put that branch's docs into production. Same-repo branches do
+      get secrets, and that is the common case for a docs corpus where everyone
+      is a collaborator.
+
+      Note this is the SECOND of two gates, not the only one. On `pull_request`
+      a fork is also stopped by the token gate (GitHub withholds secrets, so the
+      token arrives empty) — but that is not true of `pull_request_target` or
+      `workflow_run`, which deliver secrets AND report the default branch as the
+      ref. Those are refused by the event allowlist in the publish step, which is
+      what actually makes the fork claim hold.
 
       Making the safe thing the default is the entire argument for publishing from
       the action rather than from each consumer's workflow: correctness should
@@ -112,10 +117,19 @@ runs:
         # it is, the generator comes from the same ref, so the action and the
         # code it runs can never drift apart.
         REF: ${{ github.action_ref || 'main' }}
+        # Through env, not interpolated into the script below — the same rule the
+        # publish step states and follows. It was missed here, and it is not only a
+        # metacharacter question: an interpolated `out` is expanded by BASH, so
+        # `out: dist-$GITHUB_RUN_NUMBER` builds into `dist-42` while the upload and
+        # publish steps use the value as a literal and look for `dist-$GITHUB_RUN_NUMBER`
+        # — a build that succeeds and then fails to publish a directory that exists.
+        CORPUS: ${{ inputs.corpus }}
+        OUT: ${{ inputs.out }}
+        STRICT: ${{ inputs.strict }}
       run: |
         set -euo pipefail
-        args=(build --corpus "${{ inputs.corpus }}" --out "${{ inputs.out }}")
-        if [ "${{ inputs.strict }}" = "true" ]; then args+=(--strict); fi
+        args=(build --corpus "$CORPUS" --out "$OUT")
+        if [ "$STRICT" = "true" ]; then args+=(--strict); fi
         npx --yes "github:nimbarc/arcdoq-docsite#${REF}" "${args[@]}"
 
     - name: Upload
@@ -146,12 +160,37 @@ runs:
         PUBLISH_BRANCH: ${{ inputs.publish-branch }}
         DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         REF_NAME: ${{ github.ref_name }}
+        EVENT: ${{ github.event_name }}
       run: |
         set -euo pipefail
         if [ -z "${SITE}" ]; then
           echo "::error::arcdoq-token was supplied but 'site' was not. Set the slug of the arcdoq site to deploy to."
           exit 1
         fi
+
+        # The EVENT gate, which has to come first because the branch gate below
+        # cannot see this class at all.
+        #
+        # `pull_request_target` and `workflow_run` both report the DEFAULT BRANCH
+        # as `github.ref_name` while running against a pull request's head — and
+        # both deliver secrets to fork PRs, which is `pull_request_target`'s entire
+        # purpose. So the branch comparison passes and an outside contributor's
+        # markdown publishes to production under a long-lived, org-wide token. The
+        # deploy token carries no repo or ref binding, so nothing downstream in
+        # arcdoq catches it either.
+        #
+        # An ALLOWLIST rather than a denylist, deliberately: the failure mode of
+        # forgetting to list a legitimate trigger is a visible skip that explains
+        # itself, whereas forgetting to deny a dangerous one is silent publication.
+        # `merge_group` is absent for the same reason as the PR events — a merge
+        # queue runs code that has not landed yet.
+        case "${EVENT}" in
+          push|schedule|workflow_dispatch|release) ;;
+          *)
+            echo "Skipping publish: '${EVENT}' can run untrusted head content with secrets present."
+            echo "  Publishing is limited to push, schedule, workflow_dispatch and release."
+            exit 0 ;;
+        esac
 
         # The branch gate. Checked HERE rather than in the step's `if:` so a skip
         # can explain itself — a silently missing publish is the kind of thing
