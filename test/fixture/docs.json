@@ -1,0 +1,12 @@
+{
+  "name": "Meridian System Documentation",
+  "description": "What the Meridian platform does, at the level of individual rules.",
+  "colors": { "primary": "#5B57E8" },
+  "navigation": { "groups": [
+    { "group": "Start here", "pages": ["README"] },
+    { "group": "Rules", "pages": ["rules/orders/index", "rules/orders/lifecycle"] },
+    { "group": "Not yet documented", "pages": ["rules/inventory/index"] },
+    { "group": "Guides", "pages": ["guides/refund-an-order"] },
+    { "group": "Status", "pages": ["meta/status"] }
+  ] }
+}

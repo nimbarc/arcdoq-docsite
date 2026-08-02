@@ -1,0 +1,36 @@
+{
+  "name": "arcdoq-docsite",
+  "version": "0.1.0",
+  "description": "Turns a markdown corpus into a designed, self-contained static docs site.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "arcdoq-docsite": "bin/cli.mjs"
+  },
+  "exports": {
+    ".": "./src/build.mjs"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "marked": "^15.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nimbarc/arcdoq-docsite.git"
+  },
+  "keywords": [
+    "documentation",
+    "static-site-generator",
+    "markdown",
+    "arcdoq"
+  ],
+  "scripts": {
+    "test": "node --test test/"
+  }
+}

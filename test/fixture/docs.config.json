@@ -1,0 +1,13 @@
+{
+  "areaLabels": { "orders": "Orders", "inventory": "Stock levels" },
+  "statusSidecar": {
+    "path": "meta/status.md",
+    "appliesTo": "in-stage",
+    "groups": {
+      "Implementation moved": { "id": "changed", "label": "Changed since production",
+        "tier": "unconfirmed", "caveat": "behaviour can change at the next release" },
+      "Evidence only": { "id": "newly-tested", "label": "Live in production",
+        "tier": "confirmed", "caveat": "the test proving it is newer than production" }
+    }
+  }
+}

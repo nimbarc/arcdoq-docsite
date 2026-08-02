@@ -1,0 +1,124 @@
+/* ==========================================================================
+   LAYER 1 — portable primitives
+   --------------------------------------------------------------------------
+   The tinted-neutral ladder at hue 285, in both themes, plus the state accents
+   re-tuned per theme. This layer carries no product vocabulary: nothing here
+   knows what a rule or a deploy is. arcdoq's app can adopt this file as-is.
+
+   The dark half is arcdoq's shipped palette from docs/DESIGN.md, unchanged.
+   The light half is new, and it is not an inversion. Chroma falls off faster
+   at the light end than the dark end, or hue 285 turns lilac and reads sickly.
+
+   Surface semantics: --surface-N means "N steps of separation from canvas".
+   Dark separates upward (lighter), light separates downward (greyer). Every
+   component using --surface-2 for hover therefore works in both with no fork.
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* Canvas + elevation */
+  --canvas:        oklch(0.988 0.003 285);
+  --canvas-top:    oklch(0.975 0.004 285);
+  --surface-1:     oklch(0.962 0.005 285);
+  --surface-2:     oklch(0.938 0.007 285);
+  --surface-3:     oklch(0.910 0.010 285);
+
+  /* Hairlines */
+  --line-soft:     oklch(0.928 0.006 285);
+  --line:          oklch(0.882 0.008 285);
+  --line-strong:   oklch(0.800 0.013 285);
+
+  /* Ink */
+  --ink:           oklch(0.235 0.020 285);
+  --ink-2:         oklch(0.400 0.018 285);
+  --ink-3:         oklch(0.545 0.016 285);
+  --ink-4:         oklch(0.650 0.014 285);
+
+  /* State accents. Light needs these DARKER, not inverted: arcdoq's dark amber
+     sits at L 0.80, which is invisible on a 0.988 canvas. */
+  --amber:         oklch(0.560 0.125 68);
+  --amber-dim:     oklch(0.680 0.090 70);
+  --amber-wash:    oklch(0.960 0.035 78);
+  --red:           oklch(0.515 0.190 25);
+  --red-line:      oklch(0.760 0.110 25);
+  --red-wash:      oklch(0.962 0.028 25);
+  --green:         oklch(0.480 0.115 152);
+
+  /* Interaction accent. This is the ONE value a customer overrides. */
+  --accent:        oklch(0.520 0.190 293);
+  --accent-ring:   oklch(0.520 0.190 293 / 0.30);
+  --accent-fill:   oklch(0.520 0.190 293 / 0.10);
+
+  /* Shape + motion, theme-independent */
+  --radius:        11px;
+  --radius-sm:     8px;
+  --radius-lg:     16px;
+  --ease-quint:    cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-expo:     cubic-bezier(0.16, 1, 0.30, 1);
+
+  /* Light needs real shadow; dark separates by lightness alone. */
+  --lift:          0 1px 2px oklch(0.235 0.020 285 / 0.06),
+                   0 8px 24px oklch(0.235 0.020 285 / 0.07);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --canvas:        oklch(0.150 0.020 285);
+  --canvas-top:    oklch(0.168 0.022 285);
+  --surface-1:     oklch(0.190 0.020 285);
+  --surface-2:     oklch(0.224 0.020 285);
+  --surface-3:     oklch(0.265 0.021 285);
+
+  --line-soft:     oklch(0.245 0.016 285);
+  --line:          oklch(0.300 0.018 285);
+  --line-strong:   oklch(0.360 0.020 285);
+
+  --ink:           oklch(0.965 0.006 285);
+  --ink-2:         oklch(0.820 0.012 285);
+  --ink-3:         oklch(0.660 0.014 285);
+  --ink-4:         oklch(0.530 0.014 285);
+
+  --amber:         oklch(0.800 0.135 78);
+  --amber-dim:     oklch(0.580 0.095 78);
+  --amber-wash:    oklch(0.255 0.045 78);
+  --red:           oklch(0.660 0.170 22);
+  --red-line:      oklch(0.420 0.085 22);
+  --red-wash:      oklch(0.270 0.050 22);
+  --green:         oklch(0.740 0.130 152);
+
+  --accent:        oklch(0.780 0.150 296);
+  --accent-ring:   oklch(0.780 0.150 296 / 0.28);
+  --accent-fill:   oklch(0.780 0.150 296 / 0.14);
+
+  --lift:          0 1px 2px oklch(0.100 0.020 285 / 0.40),
+                   0 8px 24px oklch(0.100 0.020 285 / 0.30);
+}
+
+/* ==========================================================================
+   LAYER 2 — docs vocabulary
+   --------------------------------------------------------------------------
+   Semantic aliases onto layer 1. This is the layer arcdoq's app does NOT
+   share: the app maps deploying -> amber, this maps unconfirmed -> amber.
+   Same primitives, different vocabularies. Merged into one file it would be
+   a set that fits neither.
+
+   Tier: confirmed recedes to meta contrast, exceptions advance. 28 of the 35
+   rules on the flagship page are confirmed, so a loud confirmed state is
+   wallpaper and the seven that matter disappear into it.
+   ========================================================================== */
+
+:root {
+  --tier-confirmed:      var(--ink-3);
+  --tier-confirmed-mark: var(--line-strong);
+  --tier-unconfirmed:    var(--amber);
+  --tier-broken:         var(--red);
+  --tier-neutral:        var(--ink-3);
+
+  /* Provenance. Shape carries the state, colour never does: neither ✅ nor 📄
+     is pass/fail, so any red/green or tick/cross read is a content lie in both
+     directions. Both marks sit in ink and the glyph does the work. */
+  --prov-ink:            var(--ink-3);
+  --prov-source-line:    var(--line-strong);
+}

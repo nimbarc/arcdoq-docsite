@@ -1,0 +1,648 @@
+/* ==========================================================================
+   Docs viewer — "a register of numbered claims"
+
+   The load-bearing form is the MARK COLUMN: a narrow left channel running the
+   length of every rules page carrying the ID and, beside the first line of
+   prose, the status verdict. It is the marginal-reference column of a ledger
+   or a statute, not the inline badge of a docs theme. It is what makes 35
+   rules scannable by the key the reader actually arrived holding.
+
+   Monospace is a citation typeface here, not a mood. It is permitted ONLY on
+   strings that paste into a tool: rule IDs, repo-qualified paths, test method
+   names, code. Rule statements, prose, nav and headings are the prose face,
+   because the corpus's own editorial rule is to write behaviour as English for
+   a reader who cannot read source.
+   ========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink-2);
+  font: 400 15px/1.62 'Hanken Grotesk', ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: 'ss01', 'cv01';
+  letter-spacing: -0.006em;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); text-decoration-color: color-mix(in oklch, currentColor 35%, transparent); text-underline-offset: 2px; }
+a:hover { text-decoration-color: currentColor; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.skip {
+  position: absolute; left: 12px; top: -60px; z-index: 20;
+  background: var(--canvas-top); color: var(--ink); padding: 10px 14px;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  transition: top .18s var(--ease-quint);
+}
+.skip:focus { top: 12px; }
+
+code, kbd, .mono, .cite, .rule-id, .chip { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+/* ── top bar ─────────────────────────────────────────────────────────────── */
+
+.top {
+  position: sticky; top: 0; z-index: 12;
+  background: color-mix(in oklch, var(--canvas) 88%, transparent);
+  backdrop-filter: saturate(1.6) blur(10px);
+  border-bottom: 1px solid var(--line-soft);
+}
+.top-in {
+  max-width: 1620px; margin-inline: 28px auto; height: 54px;
+  padding: 0 24px 0 0; display: flex; align-items: center; gap: 20px;
+}
+@media (min-width: 2000px) { .top-in { margin-inline: auto; } }
+.mark {
+  display: flex; align-items: center; gap: 9px;
+  color: var(--ink); font-weight: 700; font-size: 14.5px;
+  letter-spacing: -0.015em; text-decoration: none;
+}
+.mark-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--accent); flex: none;
+}
+.top-r { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+.search-open {
+  display: flex; align-items: center; gap: 8px;
+  height: 32px; padding: 0 9px 0 11px;
+  background: var(--surface-1); color: var(--ink-3);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  font: inherit; font-size: 13px; cursor: pointer;
+  transition: border-color .16s var(--ease-quint), color .16s var(--ease-quint);
+}
+.search-open:hover { border-color: var(--line-strong); color: var(--ink-2); }
+.search-open svg { width: 14px; height: 14px; stroke: currentColor; fill: none; }
+.search-open kbd {
+  font-size: 11px; padding: 1px 5px; color: var(--ink-4);
+  border: 1px solid var(--line); border-radius: 4px; background: var(--canvas);
+}
+.theme {
+  width: 32px; height: 32px; display: grid; place-items: center;
+  background: none; border: 1px solid transparent; border-radius: var(--radius-sm);
+  color: var(--ink-3); cursor: pointer;
+}
+.theme:hover { background: var(--surface-1); color: var(--ink-2); }
+.theme svg { width: 15px; height: 15px; fill: currentColor; }
+
+/* ── frame ───────────────────────────────────────────────────────────────── */
+
+/* Anchored left, not centred. A reference document is read from its spine, and
+   centring 1500px inside a 1728px viewport left 107px of dead margin on each
+   side that made the whole thing look like it had drifted right. Past ~2000px
+   it recentres, because at that width a hard left edge reads as broken rather
+   than as deliberate. */
+.frame {
+  max-width: 1620px; margin-inline: 28px auto; padding: 0 24px 0 0;
+  display: grid; grid-template-columns: 250px minmax(0, 1fr) 196px;
+  gap: 44px; align-items: start;
+}
+@media (min-width: 2000px) { .frame { margin-inline: auto; } }
+
+main {
+  min-width: 0;
+  padding: 40px 0 140px;
+  --mark-w: 11.5rem;
+  scroll-margin-top: 70px;
+}
+
+/* ── sidebar: a coverage ledger, not 28 links ────────────────────────────── */
+
+.side {
+  position: sticky; top: 54px; align-self: start;
+  max-height: calc(100vh - 54px); overflow-y: auto;
+  padding: 34px 20px 60px 0; font-size: 13.5px;
+  /* A real hairline on the column boundary, so the divider is a decision
+     rather than a scrollbar track that happened to be visible. The thumb
+     appears on hover or keyboard scroll; the gutter stays reserved so the
+     counts never shift. */
+  border-right: 1px solid var(--line-soft);
+  scrollbar-width: thin; scrollbar-gutter: stable;
+  scrollbar-color: transparent transparent;
+}
+.side:hover, .side:focus-within { scrollbar-color: var(--line) transparent; }
+.side::-webkit-scrollbar { width: 8px; }
+.side::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
+.side:hover::-webkit-scrollbar-thumb, .side:focus-within::-webkit-scrollbar-thumb {
+  background: var(--line);
+}
+.nav-g + .nav-g { margin-top: 26px; }
+.nav-g > h2 {
+  margin: 0 0 9px; font-size: 11.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.11em; color: var(--ink-3);
+  display: flex; flex-direction: column; gap: 1px;
+}
+.nav-g > h2 span {
+  font-size: 11px; font-weight: 400; text-transform: none;
+  letter-spacing: -0.004em; color: var(--ink-4); font-style: italic;
+}
+.side ul { list-style: none; margin: 0; padding: 0; }
+.side a {
+  display: block; padding: 4px 9px; margin-left: -9px;
+  border-radius: 6px; color: var(--ink-2); text-decoration: none;
+  line-height: 1.4;
+}
+.side a:hover { background: var(--surface-1); color: var(--ink); }
+.side a[aria-current='page'] {
+  background: var(--accent-fill); color: var(--ink); font-weight: 600;
+}
+
+.ledger > .area { margin-bottom: 3px; }
+.area-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 3px 0; color: var(--ink-2);
+}
+.area.empty .area-row { color: var(--ink-4); }
+.area-row > span:first-child { flex: 1; min-width: 0; }
+.area-n {
+  font: 500 11px/1 'JetBrains Mono', monospace; color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+.area.empty .area-n { opacity: .55; }
+.strip {
+  display: inline-flex; gap: 1.5px; height: 3px; width: 38px;
+  flex: none; border-radius: 2px; overflow: hidden;
+}
+.strip > span { border-radius: 1px; }
+.strip > span[data-tier='confirmed']   { background: var(--tier-confirmed-mark); }
+.strip > span[data-tier='unconfirmed'] { background: var(--tier-unconfirmed); }
+.area > ul { margin: 0 0 9px 0; }
+.area > ul a { font-size: 13px; padding-left: 10px; }
+
+/* ── page warrant: replaces the breadcrumb ───────────────────────────────── */
+
+.page-warrant {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  font-size: 11.5px; color: var(--ink-4); margin-bottom: 22px;
+}
+.w-kind {
+  font-weight: 700; text-transform: uppercase; letter-spacing: 0.11em;
+  color: var(--ink-3);
+}
+.w-sep { color: var(--line-strong); }
+.w-dist { display: inline-flex; gap: 11px; align-items: center; }
+.d-seg { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.d-seg svg { width: 8px; height: 8px; }
+.d-seg[data-tier='confirmed']   svg { fill: var(--tier-confirmed-mark); }
+.d-seg[data-tier='unconfirmed'] svg { fill: var(--tier-unconfirmed); }
+.d-seg[data-tier='broken']      svg { fill: var(--tier-broken); }
+.d-seg[data-tier='neutral']     svg { fill: none; stroke: var(--ink-4); }
+
+/* ── headings ────────────────────────────────────────────────────────────── */
+
+h1 {
+  margin: 0 0 14px; max-width: 34ch;
+  font-size: 31px; font-weight: 700; line-height: 1.14;
+  letter-spacing: -0.03em; color: var(--ink); text-wrap: balance;
+}
+main > p, .rule-group > p, .rule-body > p { max-width: 68ch; }
+main > p:first-of-type { font-size: 16.5px; color: var(--ink-2); }
+
+.rule-group, .prose-group { margin-top: 46px; }
+/* A `##` that groups rules is furniture: set it as a label. A `##` on a guide
+   or a flow is the reader's actual heading: set it as one. */
+.rule-group > h2 {
+  margin: 0 0 6px; padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 13px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink-3);
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+}
+.prose-group > h2 {
+  margin: 0 0 12px; font-size: 21px; font-weight: 700;
+  letter-spacing: -0.022em; color: var(--ink); line-height: 1.25;
+  max-width: 34ch;
+}
+main h3 { font-size: 16.5px; font-weight: 600; letter-spacing: -0.014em; color: var(--ink); margin: 24px 0 8px; }
+.sec-range {
+  font: 400 11px/1 'JetBrains Mono', monospace;
+  letter-spacing: 0; text-transform: none; color: var(--ink-4);
+}
+
+/* ── the jump list: an affordance, never a filter ────────────────────────── */
+
+.page-ahead {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 8px;
+  margin: 26px 0 0; padding: 12px 14px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface-1); font-size: 12.5px; color: var(--ink-3);
+  max-width: none;
+}
+.page-ahead > span { color: var(--ink-2); }
+.page-ahead a {
+  font: 500 11.5px/1 'JetBrains Mono', monospace;
+  color: var(--ink-2); text-decoration: none;
+  padding: 3px 6px; border-radius: 5px; background: var(--canvas);
+  border: 1px solid var(--line-soft);
+}
+.page-ahead a:hover { border-color: var(--tier-unconfirmed); color: var(--ink); }
+
+/* ── THE RULE ATOM ───────────────────────────────────────────────────────── */
+
+.rule {
+  display: grid;
+  grid-template-columns: var(--mark-w) minmax(0, 1fr);
+  column-gap: 30px;
+  margin: 30px 0 0;
+  padding-bottom: 30px;
+  scroll-margin-top: 74px;
+}
+
+.rule-h {
+  grid-column: 1 / -1;
+  display: grid; grid-template-columns: subgrid;
+  align-items: baseline;
+  margin: 0 0 9px;
+}
+.rule-id {
+  font-size: 12.5px; font-weight: 600; letter-spacing: 0.01em;
+  color: var(--ink-3); text-decoration: none;
+  font-variant-numeric: tabular-nums;
+  display: inline-block; padding: 2px 0;
+}
+.rule-id::before {
+  content: ''; display: inline-block; width: 0; height: 0;
+}
+.rule:hover .rule-id, .rule-id:focus-visible { color: var(--accent); }
+.rule-statement {
+  font-size: 17.5px; font-weight: 600; line-height: 1.36;
+  letter-spacing: -0.017em; color: var(--ink);
+  max-width: 46ch;
+}
+.rule-statement em { font-style: italic; }
+
+.rule-body { grid-column: 2; grid-row: 2; }
+.rule-body > *:first-child { margin-top: 0; }
+.rule-body > *:last-child { margin-bottom: 0; }
+.rule-body p { margin: 0 0 11px; }
+
+/* The verdict sits in the margin, parallel to the first line of prose, but
+   AFTER the body in the DOM so a screen reader hears statement, answer, then
+   status. Getting that order wrong reinstates exactly the burial this design
+   exists to remove, for the reader who can least skip it. */
+.rule-trust {
+  grid-column: 1; grid-row: 2;
+  margin: 3px 0 0; font-size: 11.5px; line-height: 1.45;
+  color: var(--ink-4);
+  display: flex; flex-direction: column; gap: 2px;
+  align-items: flex-start;
+}
+.tier-mark { display: inline-flex; margin-bottom: 2px; }
+.tier-mark svg { width: 9px; height: 9px; }
+.tier-label { font-weight: 500; }
+.rule-trust[data-tier='confirmed']   .tier-mark svg { fill: var(--tier-confirmed-mark); }
+.rule-trust[data-tier='confirmed']   .tier-label { color: var(--ink-4); }
+.rule-trust[data-tier='unconfirmed'] .tier-mark svg { fill: var(--tier-unconfirmed); }
+.rule-trust[data-tier='unconfirmed'] .tier-label { color: var(--amber); font-weight: 600; }
+.rule-trust[data-tier='broken']      .tier-mark svg { fill: var(--tier-broken); }
+.rule-trust[data-tier='broken']      .tier-label { color: var(--red); font-weight: 600; }
+.rule-trust[data-tier='neutral']     .tier-mark svg { fill: none; stroke: var(--ink-4); }
+
+/* The caveat is the part that makes the status honest. It attaches to ANY
+   tier, including confirmed: seven rules are confirmed against production and
+   have no test at all. */
+.tier-caveat {
+  color: var(--ink-3); font-weight: 500;
+  padding-left: 8px; border-left: 1px solid var(--line);
+  margin: 2px 0 1px;
+}
+.tier-origin { color: var(--ink-4); opacity: .8; font-size: 11px; }
+
+/* ── the warrant: open, always, below the prose ──────────────────────────── */
+
+.warrant {
+  grid-column: 2; grid-row: 3;
+  margin-top: 13px; padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+  max-width: 68ch;
+}
+.w-line {
+  margin: 0; font-size: 11.5px; color: var(--ink-4);
+  display: flex; flex-wrap: wrap; gap: 0 2px; align-items: baseline;
+}
+.w-line code { font-size: 11px; }
+.w-cites {
+  margin: 7px 0 0; display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 2px 14px; font-size: 11.5px;
+}
+.w-cites dt {
+  color: var(--ink-4); font-size: 10.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em; padding-top: 1px;
+}
+.w-cites dd { margin: 0; grid-column: 2; display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.w-cites dt + dd { grid-row: auto; }
+.repo {
+  flex: none; font: 500 10px/1.7 'JetBrains Mono', monospace;
+  color: var(--ink-4); background: var(--surface-1);
+  border: 1px solid var(--line-soft); border-radius: 4px;
+  padding: 0 4px; letter-spacing: 0;
+}
+.cite {
+  font-size: 11.5px; color: var(--ink-3); overflow-wrap: anywhere;
+  letter-spacing: -0.01em;
+}
+.cite .dir { color: var(--ink-4); opacity: .75; }
+.cite .base { color: var(--ink-2); }
+.cite .member { color: var(--ink-4); }
+.w-suite .cite { color: var(--ink-4); }
+
+/* ── provenance ──────────────────────────────────────────────────────────── */
+
+.ev-mark {
+  display: inline-block; width: 0.72em; height: 0.72em;
+  margin-left: 0.36em; color: var(--prov-ink); vertical-align: -0.01em;
+}
+.ev-mark svg { width: 100%; height: 100%; fill: currentColor; stroke: currentColor; }
+.ev-mark[data-ev='from-source'] svg { fill: none; }
+.ev-mark[data-ev='from-source'] { color: var(--ink-2); }
+
+/* The minority state carries permanent, quiet decoration. Roughly 34 of the
+   guide's 44 marks are `seen`, so decorating the majority would be texture,
+   not signal. The rare state is then legible at rest, on touch, with no
+   JavaScript, no hover, and no control. */
+.claim[data-ev='from-source'] {
+  text-decoration: underline dashed var(--prov-source-line);
+  text-underline-offset: 3.5px;
+  text-decoration-thickness: 1px;
+}
+.claim[data-ev='seen'] { }
+
+.ev-key {
+  margin: 12px 0 0; display: grid; gap: 5px 14px;
+  grid-template-columns: max-content minmax(0, 1fr);
+  font-size: 13px;
+}
+.ev-key > div { display: contents; }
+.ev-key dt { display: flex; align-items: center; gap: 7px; color: var(--ink-2); }
+.ev-key dt .ev-mark { margin-left: 0; width: 0.7em; height: 0.7em; }
+.k-name { font-size: 12px; font-weight: 600; }
+.ev-key dd { margin: 0; color: var(--ink-3); font-size: 12.5px; }
+
+.covered { position: relative; }
+.cover-tag {
+  margin: 6px 0 0; font-size: 11.5px; color: var(--ink-4);
+  display: flex; align-items: center; gap: 6px;
+}
+.cover-tag .ev-mark { margin-left: 0; }
+
+.page-provenance {
+  margin: 0 0 26px; padding: 14px 16px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface-1);
+}
+.page-provenance dl {
+  margin: 0; display: grid; gap: 6px 20px;
+  grid-template-columns: max-content minmax(0, 1fr);
+  font-size: 12.5px;
+}
+.page-provenance > dl > div { display: contents; }
+.page-provenance dt {
+  color: var(--ink-4); font-size: 10.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em; padding-top: 2px;
+}
+.page-provenance dd { margin: 0; color: var(--ink-2); }
+.page-provenance [data-tone='pending'] { color: var(--amber); font-weight: 600; }
+.pv-split { color: var(--ink-4); }
+.pv-split::before { content: '· '; }
+
+/* ── notes: two mechanical stamps + an untyped fallback. Full border only. ── */
+
+.note {
+  margin: 20px 0; padding: 13px 16px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface-1); max-width: 70ch;
+  font-size: 14.5px;
+}
+.note > *:first-child { margin-top: 0; }
+.note > *:last-child { margin-bottom: 0; }
+.note p { margin: 0 0 9px; }
+.note-title {
+  font-weight: 700; color: var(--ink); font-size: 14.5px;
+  margin-bottom: 4px !important; letter-spacing: -0.012em;
+}
+/* Deliberately the quietest thing on any page it appears on. Styled as a
+   warning it would be the loudest element on a generated page forever. */
+.note[data-kind='generated'] {
+  background: none; border-color: var(--line-soft);
+  font-size: 12.5px; color: var(--ink-4); padding: 9px 13px;
+}
+.note[data-kind='generated'] .note-title { font-size: 12.5px; color: var(--ink-3); }
+.rule-body .note { margin: 11px 0; font-size: 14px; }
+
+/* ── prose ───────────────────────────────────────────────────────────────── */
+
+main p { margin: 0 0 13px; }
+main ul, main ol { margin: 0 0 15px; padding-left: 1.15em; max-width: 68ch; }
+main li { margin-bottom: 5px; }
+main li::marker { color: var(--ink-4); }
+strong { color: var(--ink); font-weight: 600; }
+main hr { border: 0; border-top: 1px solid var(--line-soft); margin: 34px 0; }
+
+main :not(pre) > code {
+  font-size: 0.875em; color: var(--ink-2);
+  background: var(--surface-1); border: 1px solid var(--line-soft);
+  border-radius: 5px; padding: 0.08em 0.34em;
+  overflow-wrap: anywhere;
+}
+pre.code {
+  margin: 16px 0; padding: 13px 15px; overflow-x: auto;
+  background: var(--surface-1); border: 1px solid var(--line-soft);
+  border-radius: var(--radius); font-size: 12.5px; line-height: 1.6;
+  max-width: 70ch;
+}
+pre.code code { color: var(--ink-2); }
+
+.table-wrap { margin: 16px 0; overflow-x: auto; max-width: 100%; }
+table { border-collapse: collapse; font-size: 13.5px; min-width: 100%; }
+th, td { text-align: left; padding: 8px 16px 8px 0; vertical-align: top; border-bottom: 1px solid var(--line-soft); }
+th { color: var(--ink-3); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; padding-bottom: 6px; }
+tbody tr:last-child td { border-bottom: 0; }
+table.no-head thead { display: none; }
+
+.link-inert {
+  color: var(--ink-4); text-decoration: underline dotted var(--line-strong);
+  text-underline-offset: 2px; cursor: help;
+}
+
+/* ── ID rail ─────────────────────────────────────────────────────────────── */
+
+.rail {
+  position: sticky; top: 54px; align-self: start;
+  max-height: calc(100vh - 54px); overflow-y: auto;
+  padding: 40px 0 60px; font-size: 12px;
+  scrollbar-width: thin;
+}
+.rail-h {
+  margin: 0 0 12px; font: 600 11px/1 'JetBrains Mono', monospace;
+  color: var(--ink-3); letter-spacing: 0.03em;
+  display: flex; justify-content: space-between; align-items: baseline;
+}
+.rail-h span { color: var(--ink-4); font-weight: 400; }
+.rail ul { list-style: none; margin: 0; padding: 0; }
+.rail li + li { margin-top: 13px; }
+.rail-sec {
+  display: block; color: var(--ink-3); text-decoration: none;
+  font-size: 11.5px; line-height: 1.35; margin-bottom: 5px;
+}
+.rail-sec:hover { color: var(--ink); }
+.chips { display: flex; flex-wrap: wrap; gap: 3px; }
+.chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 26px; height: 24px; padding: 0 5px;
+  border: 1px solid var(--line-soft); border-radius: 5px;
+  background: var(--canvas); color: var(--ink-3);
+  font-size: 10.5px; font-weight: 500; text-decoration: none;
+  font-variant-numeric: tabular-nums;
+  position: relative;
+  transition: border-color .14s var(--ease-quint), color .14s var(--ease-quint);
+}
+.chip:hover { border-color: var(--line-strong); color: var(--ink); }
+.chip[data-tier='unconfirmed'] { border-color: color-mix(in oklch, var(--amber) 42%, var(--line-soft)); color: var(--amber); }
+.chip[data-tier='broken'] { border-color: var(--red-line); color: var(--red); }
+.chip[aria-current='location'] {
+  background: var(--accent-fill); border-color: var(--accent); color: var(--ink);
+  font-weight: 600;
+}
+
+/* ── target persistence ──────────────────────────────────────────────────── */
+
+/* The frame persists; it is not a fade. A rule is often qualified by another
+   one screens away and cited again later, so readers demonstrably leave the
+   target and come back. A two-second flash is gone before a phone
+   has finished painting. No negative z-index and no pseudo-element: a frame
+   that can slip behind a background is a frame that sometimes is not there. */
+.rule:target, .rule.is-target {
+  background: var(--accent-fill);
+  box-shadow: 0 0 0 1px var(--accent-ring);
+  border-radius: var(--radius-lg);
+  margin-inline: -18px;
+  padding: 16px 18px 26px;
+}
+
+/* ── key bar ─────────────────────────────────────────────────────────────── */
+
+.keybar {
+  position: fixed; left: 0; right: 0; top: 54px; z-index: 11;
+  display: flex; gap: 20px; align-items: center;
+  padding: 7px 24px; font-size: 11.5px; color: var(--ink-3);
+  background: color-mix(in oklch, var(--canvas-top) 92%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line-soft);
+}
+.keybar > span { display: inline-flex; align-items: center; gap: 6px; }
+.keybar .ev-mark { margin-left: 0; }
+.keybar .kb-state { margin-left: auto; color: var(--ink-4); }
+.keybar .kb-state b { color: var(--amber); font-weight: 600; }
+
+/* ── search ──────────────────────────────────────────────────────────────── */
+
+.sheet {
+  position: fixed; inset: 0; z-index: 40; display: none;
+  background: color-mix(in oklch, var(--canvas) 55%, transparent);
+  backdrop-filter: blur(3px);
+  padding: 10vh 20px 20px;
+}
+.sheet[data-open] { display: block; }
+.sheet-in {
+  max-width: 620px; margin: 0 auto;
+  background: var(--canvas-top); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); box-shadow: var(--lift);
+  overflow: hidden;
+}
+.sheet input {
+  width: 100%; border: 0; border-bottom: 1px solid var(--line-soft);
+  background: none; color: var(--ink); padding: 15px 18px;
+  font: 400 16px/1 'Hanken Grotesk', sans-serif; outline: none;
+}
+.sheet input::placeholder { color: var(--ink-4); }
+.results { list-style: none; margin: 0; padding: 6px; max-height: 52vh; overflow-y: auto; }
+.results li { border-radius: 7px; }
+.results a { display: block; padding: 9px 12px; text-decoration: none; color: inherit; }
+.results li[aria-selected='true'] { background: var(--accent-fill); }
+.r-top { display: flex; align-items: baseline; gap: 9px; }
+.r-id { font: 600 11.5px/1 'JetBrains Mono', monospace; color: var(--ink-3); }
+.r-tier svg { width: 8px; height: 8px; }
+.r-tier[data-tier='confirmed'] svg { fill: var(--tier-confirmed-mark); }
+.r-tier[data-tier='unconfirmed'] svg { fill: var(--tier-unconfirmed); }
+.r-st { font-size: 14px; color: var(--ink); font-weight: 500; line-height: 1.35; margin-top: 2px; }
+.r-meta { font-size: 11px; color: var(--ink-4); margin-top: 2px; }
+.sheet-foot {
+  display: flex; gap: 16px; padding: 8px 14px; font-size: 11px;
+  color: var(--ink-4); border-top: 1px solid var(--line-soft);
+}
+.sheet-foot kbd { border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; font-size: 10px; }
+.sheet-empty { padding: 18px; font-size: 13px; color: var(--ink-3); }
+.sheet-empty code { font-size: 12px; }
+
+/* ── responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 1180px) {
+  .frame { grid-template-columns: 232px minmax(0, 1fr); }
+  .rail { display: none; }
+  main { --mark-w: 10rem; }
+}
+
+@media (max-width: 860px) {
+  .frame { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .side {
+    position: static; max-height: none; padding: 20px 0 8px;
+    border-bottom: 1px solid var(--line-soft); margin-bottom: 10px;
+  }
+  .side .nav-g { display: none; }
+  .side .nav-g:has(a[aria-current='page']) { display: block; }
+  main { padding-top: 22px; }
+}
+
+/* Below the collapse point the mark column folds into the heading: ID and
+   verdict share row one, statement below. Tested against WS-012, whose
+   statement is 101 characters. */
+@media (max-width: 720px) {
+  main { --mark-w: 0; }
+  .rule { grid-template-columns: minmax(0, 1fr); column-gap: 0; }
+  .rule-h { display: block; }
+  .rule-id { display: block; margin-bottom: 3px; }
+  .rule-statement { max-width: none; display: block; font-size: 17px; }
+  .rule-body, .rule-trust, .warrant { grid-column: 1; }
+  .rule-trust {
+    grid-row: auto; order: -1; flex-direction: row; flex-wrap: wrap;
+    align-items: baseline; gap: 4px 9px; margin: 0 0 9px;
+  }
+  .tier-caveat { border-left: 0; padding-left: 0; margin: 0; }
+  .tier-caveat::before { content: '· '; color: var(--line-strong); }
+  .rule { display: flex; flex-direction: column; }
+  h1 { font-size: 26px; max-width: none; }
+  .frame { padding: 0 18px; }
+  .top-in { padding: 0 18px; }
+  .page-provenance dl { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .page-provenance > dl > div + div { margin-top: 8px; }
+  .w-cites { grid-template-columns: minmax(0, 1fr); gap: 1px; }
+  .w-cites dd { grid-column: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: .001ms !important; animation-duration: .001ms !important; }
+}
+
+@media print {
+  .side, .rail, .top, .keybar, .sheet { display: none !important; }
+  .frame { display: block; }
+  .rule { break-inside: avoid; }
+}
+
+/* The declared gap group is the burn-down, and it is set back so it reads as
+   one rather than as a second, larger Rules section. It is not hidden: a
+   search that returns nothing cannot tell a reader whether the behaviour is
+   undocumented or whether they searched for the wrong word. */
+.nav-g.is-gap > ul { columns: 2; column-gap: 12px; font-size: 12.5px; }
+.nav-g.is-gap a { color: var(--ink-3); padding: 2px 7px; margin-left: -7px; break-inside: avoid; }
+.nav-g.is-gap a:hover { color: var(--ink); }
+.nav-g.is-gap a[aria-current='page'] { color: var(--ink); }

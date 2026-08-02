@@ -1,0 +1,871 @@
+/* arcdoq-docsite — the generator.
+ *
+ * Turns a markdown corpus into a finished, self-contained static site. No
+ * server, no request-time rendering, no theme engine: the output is HTML, CSS,
+ * one JS file and a rules.json sidecar, which is exactly what a host serves.
+ */
+
+import { marked } from 'marked'
+import fs from 'node:fs'
+import path from 'node:path'
+
+const THEME = path.join(import.meta.dirname, 'theme')
+
+export function build({ corpus = process.cwd(), out = 'dist', config: overrides = {} } = {}) {
+const CORPUS = path.resolve(corpus)
+const OUT = path.resolve(out)
+
+/* ── config: everything customer-declarable lives here ───────────────────── */
+
+// docs.json IS the filter and the nav. Reading it rather than restating it
+// means the generator cannot disagree with the corpus about what the site
+// contains, which is the whole failure mode here.
+const docsJsonPath = path.join(CORPUS, 'docs.json')
+if (!fs.existsSync(docsJsonPath)) {
+  throw new Error(`No docs.json in ${CORPUS}. It declares the nav and the publish set.`)
+}
+const docsJson = JSON.parse(fs.readFileSync(docsJsonPath, 'utf8'))
+const navGroups = docsJson.navigation.groups.map((g) => ({
+  group: g.group, pages: g.pages.map((p) => `${p}.md`),
+}))
+
+// One line per group, from README.md's own three-content-types table. It is
+// read once and forgotten today, and the moment it matters is the moment
+// someone is choosing where to click.
+const GROUP_NOTE = {
+  Rules: 'does X work?',
+  Flows: 'what happens when…?',
+  Guides: 'how do I…?',
+  'Start here': 'what is this corpus?',
+  'Not yet documented': 'the gap, on purpose',
+  Status: 'what is true where, right now',
+}
+
+const defaults = {
+  name: docsJson.name,
+  accent: docsJson.colors?.primary || '#5B57E8',
+  publish: navGroups.flatMap((g) => g.pages),
+  rules: { idPattern: /^([A-Z][A-Z0-9]{1,9})-(\d{1,4})$/ },
+  // Empty by default. A package shipping ONE customer's vocabulary to every
+  // other customer is how a product becomes a fork of itself. Corpora declare
+  // their own map in docs.config.json; see docs.config.example.json.
+  areaLabels: {},
+  status: {
+    // README.md, after 56c1538: `implemented` means the cited paths MATCH
+    // production, not that anyone exercised the behaviour there. The earlier
+    // label "Confirmed against production" overclaimed in exactly the
+    // direction the corpus had just corrected.
+    implemented:  { label: 'Matches production',           tier: 'confirmed',   origin: 'computed' },
+    'in-stage':   { label: 'Not yet in production',        tier: 'unconfirmed', origin: 'computed' },
+    'in-dev':     { label: 'Not a release candidate',      tier: 'unconfirmed', origin: 'computed' },
+    unknown:      { label: 'Citation does not resolve',    tier: 'broken',      origin: 'computed' },
+    unverified:   { label: 'Written, not confirmed',       tier: 'unconfirmed', origin: 'asserted' },
+    planned:      { label: 'Decided, not built',           tier: 'unconfirmed', origin: 'asserted' },
+    deprecated:   { label: 'No longer true',               tier: 'broken',      origin: 'asserted' },
+    undocumented: { label: 'Not written yet',              tier: 'neutral',     origin: 'asserted' },
+  },
+  evidence: {
+    coverageWords: ['all', 'both', 'each', 'every', 'the above'],
+    markers: [
+      { token: '✅', id: 'seen', short: 'seen',
+        label: 'seen rendering in the browser', glyph: 'solid' },
+      { token: '\u{1F4C4}', id: 'from-source', short: 'from source',
+        label: 'read from source, accurate about what the code does, silent about what renders',
+        glyph: 'dashed' },
+    ],
+  },
+}
+
+// Shallow merge per top-level key. A customer overriding `areaLabels` supplies
+// the whole map; overriding `status` supplies the whole vocabulary. Deep
+// merging a vocabulary is how you end up with half a customer's labels and
+// half of ours, which is worse than either.
+const config = { ...defaults, ...overrides,
+  evidence: { ...defaults.evidence, ...(overrides.evidence || {}) },
+  rules: { ...defaults.rules, ...(overrides.rules || {}) },
+  areaLabels: { ...defaults.areaLabels, ...(overrides.areaLabels || {}) },
+  status: { ...defaults.status, ...(overrides.status || {}) },
+}
+
+const warnings = []
+const warn = (m) => { if (!warnings.includes(m)) warnings.push(m) }
+
+// Claim counts are accumulated by the renderer itself, never by a second scan
+// of the source. Two counts that can disagree is the drift failure this whole
+// corpus exists to prevent, and the strip would be the thing telling the lie.
+let tally = {}
+const count = (id) => { tally[id] = (tally[id] || 0) + 1 }
+
+/* ── small helpers ───────────────────────────────────────────────────────── */
+
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+const inline = (md) => marked.parseInline(md ?? '')
+
+// GitHub slug: lowercase, strip outside [a-z0-9 _-], then replace each space
+// INDIVIDUALLY without collapsing runs. Collapsing reports live links broken.
+const slug = (s) => s.toLowerCase().normalize('NFC')
+  .replace(/[^a-z0-9 _-]/g, '').replace(/ /g, '-')
+
+function frontmatter(src) {
+  const m = /^---\n([\s\S]*?)\n---\n/.exec(src)
+  if (!m) return { data: {}, body: src }
+  const data = {}
+  let key = null
+  for (const raw of m[1].split('\n')) {
+    if (!raw.trim()) continue
+    const kv = /^([a-zA-Z][\w-]*):\s*(.*)$/.exec(raw)
+    if (kv && !raw.startsWith(' ')) {
+      key = kv[1]
+      data[key] = kv[2] === '' ? [] : kv[2]
+    } else if (key && /^\s*-\s/.test(raw)) {
+      if (!Array.isArray(data[key])) data[key] = []
+      data[key].push(raw.replace(/^\s*-\s*/, ''))
+    } else if (key && Array.isArray(data[key]) && data[key].length) {
+      data[key][data[key].length - 1] += ' ' + raw.trim()
+    }
+  }
+  return { data, body: src.slice(m[0].length) }
+}
+
+/* ── provenance: R1 + guard A (position) + guard B (topic) + R2 ──────────── */
+
+const MARKERS = config.evidence.markers
+const MARKER_RE = new RegExp(
+  '(' + MARKERS.map((m) => m.token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')\\uFE0F?',
+  'gu'
+)
+const markerById = Object.fromEntries(MARKERS.map((m) => [m.id, m]))
+const markerByToken = Object.fromEntries(MARKERS.map((m) => [m.token, m]))
+
+const glyphSvg = (kind) => kind === 'solid'
+  ? '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="3.4"/></svg>'
+  : '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="3.7" fill="none" stroke-width="1.6" stroke-dasharray="2.1 1.9"/></svg>'
+
+function markGlyph(m) {
+  return `<span class="ev-mark" data-ev="${m.id}" role="img" aria-label="${esc(m.short)}">${glyphSvg(m.glyph)}</span>`
+}
+
+// Guard A: a token is a mark only when it closes a clause. It is NOT a mark
+// when it is used as a noun ("the rest are 📄." / "Wording is 📄 from source").
+function isMark(text, start, end) {
+  const before = text.slice(0, start).replace(/\s+$/, '')
+  const after = text.slice(end).replace(/^[ \t]+/, '')
+  if (!before) return false                        // the legend's own cell
+  if (/^\./.test(after)) return false              // "... are 📄."
+  if (/^[a-z]/.test(after)) return false           // "📄 from source"
+  if (after === '' || /^\n/.test(after)) return true  // closes its container
+  if (/^\(/.test(after)) return true               // "…**Search addresses…** ✅ (on the…"
+  return /[.!?)*`…\]:]$/.test(before)              // a completed clause
+}
+
+// A declared token ALWAYS becomes the designed glyph, mark or not. Raw ✅ and
+// 📄 are vendor-coloured bitmaps that differ across platforms, cannot take a
+// semantic tone, and at body size are optically louder than the sentence they
+// annotate. Guard A decides whether it also OPENS a claim run, nothing more.
+function deraw(html) {
+  return html.replace(MARKER_RE, (t, tok) => markGlyph(markerByToken[tok]))
+}
+
+const isCoverageRun = (t) => {
+  const words = t.toLowerCase().match(/[a-z]+/g) || []
+  if (!words.length) return false
+  const cover = new Set([...config.evidence.coverageWords.flatMap((w) => w.split(' ')),
+    'only', 'rest', 'remain', 'remains', 'still', 'the', 'are', 'is'])
+  return words.every((w) => cover.has(w))
+}
+
+// R1. Per block container, a marker CLOSES a run: the run starts at the
+// previous marker (or the container start) and ends before this marker.
+function provenance(md) {
+  MARKER_RE.lastIndex = 0
+  const marks = []
+  let m
+  while ((m = MARKER_RE.exec(md))) {
+    if (isMark(md, m.index, m.index + m[0].length)) {
+      marks.push({ at: m.index, len: m[0].length, marker: markerByToken[m[1]] })
+    }
+  }
+  if (!marks.length) return deraw(inline(md))
+
+  let out = ''
+  let cursor = 0
+  for (const mk of marks) {
+    const runMd = md.slice(cursor, mk.at)
+    // Guard B: a coverage statement is a topic sentence, not a claim.
+    if (isCoverageRun(runMd)) {
+      out += deraw(inline(runMd)) + markGlyph(mk.marker)
+    } else {
+      count(mk.marker.id)
+      out += `<span class="claim" data-ev="${mk.marker.id}">${deraw(inline(runMd))}` +
+             `${markGlyph(mk.marker)}</span>`
+    }
+    cursor = mk.at + mk.len
+  }
+  // A run can close mid-parenthetical: "…the rest grey. 📄 (**Added by admin**
+  // seen. ✅)" leaves ")" stranded outside the claim that owns it. Trailing
+  // punctuation belongs to the run it closes, not to the page.
+  let tail = md.slice(cursor)
+  const orphan = /^([)\].,;:!?"'’”]+)([\s\S]*)$/.exec(tail)
+  if (orphan && out.endsWith('</span>')) {
+    out = out.slice(0, -'</span>'.length) + esc(orphan[1]) + '</span>'
+    tail = orphan[2]
+  }
+  if (tail.trim()) out += deraw(inline(tail))   // delegated prose stays unwrapped
+  return out
+}
+
+const tallyMarks = (md) => {
+  MARKER_RE.lastIndex = 0
+  const counts = {}
+  let m
+  while ((m = MARKER_RE.exec(md))) {
+    if (!isMark(md, m.index, m.index + m[0].length)) continue
+    const id = markerByToken[m[1]].id
+    counts[id] = (counts[id] || 0) + 1
+  }
+  return counts
+}
+
+// R2: a paragraph that is nothing but coverage words plus a marker is a
+// block-level tag on the block above it. Exists for exactly one line in the
+// corpus ("All 📄." governing the import-outcomes table). Narrow, fails safe.
+function coverageTag(md) {
+  const stripped = md.replace(MARKER_RE, '').trim()
+  if (!stripped || stripped.length > 24) return null
+  if (!isCoverageRun(stripped)) return null
+  MARKER_RE.lastIndex = 0
+  const m = MARKER_RE.exec(md)
+  return m ? markerByToken[m[1]] : null
+}
+
+/* ── the rule metadata line ──────────────────────────────────────────────── */
+
+function parseMetaLine(md) {
+  const out = { status: null, tests: [], sources: [], sourceNote: null }
+  for (const part of md.split(/\s+·\s+/)) {
+    const f = /^\*\*(\w+):\*\*\s*([\s\S]*)$/.exec(part.trim())
+    if (!f) continue
+    const [, field, rest] = f
+    if (field === 'Status') { out.status = rest.trim(); continue }
+    // rule-format.md: split on the FIRST " — ". Everything before it is
+    // repo-qualified paths; everything after is prose that may hold backticks.
+    const dash = rest.indexOf(' — ')
+    const cites = dash === -1 ? rest : rest.slice(0, dash)
+    if (dash !== -1) out.sourceNote = rest.slice(dash + 3).trim()
+    for (const c of cites.matchAll(/`([^`]+)`/g)) {
+      const [repo, ...tail] = c[1].split(':')
+      const value = tail.join(':')
+      if (field === 'Test') out.tests.push({ repo, name: value })
+      if (field === 'Source') {
+        const [p, member] = value.split('#')
+        out.sources.push({ repo, path: p, member: member || null })
+      }
+    }
+  }
+  return out
+}
+
+// An OPTIONAL sidecar. Some corpora compute a status token that carries more
+// than one fact: the same token can mean "the behaviour changed" or "only the
+// evidence changed", and those are not the same answer to "can I rely on this?"
+// A corpus that separates them declares where, and under which headings, and
+// the renderer respects the split. Everything here is declared, never inferred:
+// a package that hardcodes one corpus's section names is that corpus's fork
+// wearing a version number.
+//
+//   "statusSidecar": {
+//     "path": "meta/status.md",
+//     "appliesTo": "in-stage",
+//     "groups": {
+//       "<a heading in that file>": {
+//         "id": "changed", "label": "…", "tier": "unconfirmed", "caveat": "…"
+//       }
+//     }
+//   }
+function readBasisSidecar() {
+  const sc = config.statusSidecar
+  if (!sc?.path || !sc.groups) return {}
+  const p = path.join(CORPUS, sc.path)
+  if (!fs.existsSync(p)) { warn(`statusSidecar declared but ${sc.path} is missing`); return {} }
+  const md = fs.readFileSync(p, 'utf8')
+  const basis = {}
+  for (const heading of Object.keys(sc.groups)) {
+    const q = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const re = new RegExp('#{2,4}\\s+' + q + '[^\\n]*\\n([\\s\\S]*?)(?=\\n#{2,4} |$)')
+    const sec = re.exec(md)
+    if (!sec) { warn(`${sc.path} has no "${heading}" section`); continue }
+    for (const m of sec[1].matchAll(/\[`?([A-Z][A-Z0-9]*-\d+)`?\]/g)) basis[m[1]] = heading
+  }
+  return basis
+}
+const BASIS = readBasisSidecar()
+const BASIS_VOCAB = config.statusSidecar?.groups || {}
+
+function caveatsFor(meta, status, id) {
+  const c = []
+  // The correction that makes the axis true rather than tidy: a rule can match
+  // production and still have nothing testing it. A pure tier ladder renders
+  // those at maximum confidence, indistinguishable from a fully warranted one.
+  if (!meta.tests.length) c.push({ kind: 'unpinned', text: 'nothing tests this' })
+  const b = status === config.statusSidecar?.appliesTo && BASIS_VOCAB[BASIS[id]]
+  if (b && b.caveat) c.push({ kind: b.id || 'basis', text: b.caveat })
+  return c
+}
+
+function renderWarrant(meta) {
+  const summary = []
+  summary.push(meta.tests.length
+    ? `${meta.tests.length} test${meta.tests.length > 1 ? 's' : ''}`
+    : 'No test')
+  const repos = [...new Set([...meta.tests, ...meta.sources].map((x) => x.repo))]
+  summary.push(repos.map((r) => r).join(' + '))
+  if (meta.sourceNote) summary.push(inline(meta.sourceNote))
+
+  // Hoist a shared `suite > ` prefix so only the distinguishing tail repeats.
+  let suite = null
+  if (meta.tests.length > 1) {
+    const heads = meta.tests.map((t) => t.name.split(' > ').slice(0, -1).join(' > '))
+    if (heads[0] && heads.every((h) => h === heads[0])) suite = heads[0]
+  }
+
+  const testRows = meta.tests.map((t) => {
+    const name = suite ? t.name.slice(suite.length + 3) : t.name
+    return `<dd><span class="repo">${esc(t.repo)}</span>` +
+           `<code class="cite">${esc(name)}</code></dd>`
+  }).join('')
+
+  const srcRows = meta.sources.map((s) => {
+    const i = s.path.lastIndexOf('/')
+    const dir = i === -1 ? '' : s.path.slice(0, i + 1)
+    const base = i === -1 ? s.path : s.path.slice(i + 1)
+    return `<dd><span class="repo">${esc(s.repo)}</span>` +
+      `<code class="cite path"><span class="dir">${esc(dir)}</span>` +
+      `<span class="base">${esc(base)}</span>` +
+      (s.member ? `<span class="member">#${esc(s.member)}</span>` : '') + `</code></dd>`
+  }).join('')
+
+  return `<div class="warrant" data-tests="${meta.tests.length}">
+  <p class="w-line">${summary.join('<span aria-hidden="true"> · </span>')}</p>
+  <dl class="w-cites">
+    ${meta.tests.length ? `<dt>${meta.tests.length > 1 ? 'Tests' : 'Test'}</dt>${
+      suite ? `<dd class="w-suite"><code class="cite">${esc(suite)}</code></dd>` : ''}${testRows}` : ''}
+    <dt>Source</dt>${srcRows}
+  </dl>
+</div>`
+}
+
+/* ── page model ──────────────────────────────────────────────────────────── */
+
+function buildPage(relPath) {
+  const src = fs.readFileSync(path.join(CORPUS, relPath), 'utf8')
+  const { data, body } = frontmatter(src)
+  const tokens = marked.lexer(body)
+  tally = {}
+
+  const page = { relPath, data, title: '', lead: [], sections: [], rules: [] }
+  let section = null
+  let rule = null
+  let pendingAnchor = null
+  let lastBlock = null
+
+  const push = (html) => {
+    if (rule) rule.body.push(html)
+    else if (section) section.body.push(html)
+    else page.lead.push(html)
+    lastBlock = { html, sink: rule ? rule.body : section ? section.body : page.lead }
+  }
+
+  const newSection = (title) => {
+    section = { title, id: slug(title), body: [], rules: [] }
+    page.sections.push(section)
+    rule = null
+  }
+
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i]
+
+    // The `---` immediately before a `##` is an authoring artifact for
+    // GitHub's flat rendering. Rendering both gives every section two rules.
+    if (t.type === 'hr') {
+      const next = tokens[i + 1]
+      if (next && next.type === 'heading' && next.depth === 2) continue
+      push('<hr>')
+      continue
+    }
+
+    // The corpus's explicit `<a id="area-005"></a>` is what makes an ID
+    // pasteable into a ticket and stable forever (rule-format.md:133-141).
+    // It sits on the line directly above its heading with no blank line, so
+    // marked lexes it as a PARAGRAPH, not an html block. Missing that means
+    // every rule is addressed by a slugified title instead, which is exactly
+    // the breakage the corpus writes those anchors to prevent.
+    const bareAnchor = (t.type === 'html' || t.type === 'paragraph') &&
+      /^\s*<a id="([^"]+)"><\/a>\s*$/.exec(t.raw)
+    if (bareAnchor) { pendingAnchor = bareAnchor[1]; continue }
+    if (t.type === 'html') continue                 // drop other raw HTML
+
+    if (t.type === 'heading') {
+      if (t.depth === 1) { page.title = t.text; continue }
+      if (t.depth === 2) { newSection(t.text); continue }
+      if (t.depth === 3) {
+        const m = /^([A-Z][A-Z0-9]{1,9}-\d{1,4})\s+—\s+([\s\S]+)$/.exec(t.text)
+        if (m && config.rules.idPattern.test(m[1])) {
+          if (!section) newSection('')
+          rule = {
+            id: m[1], anchor: pendingAnchor || slug(t.text),
+            statement: m[2], body: [], meta: null, caveats: [],
+          }
+          if (pendingAnchor && pendingAnchor !== m[1].toLowerCase()) {
+            warn(`anchor/ID mismatch on ${m[1]} (${pendingAnchor})`)
+          }
+          pendingAnchor = null
+          section.rules.push(rule)
+          page.rules.push(rule)
+          continue
+        }
+        rule = null
+        push(`<h3 id="${slug(t.text)}">${inline(t.text)}</h3>`)
+        continue
+      }
+      push(`<h${t.depth}>${inline(t.text)}</h${t.depth}>`)
+      continue
+    }
+
+    if (t.type === 'paragraph') {
+      if (rule && !rule.meta && /^\*\*Status:\*\*/.test(t.text)) {
+        rule.meta = parseMetaLine(t.text)
+        continue
+      }
+      const cov = coverageTag(t.text)
+      if (cov && lastBlock) {                                   // R2
+        lastBlock.sink[lastBlock.sink.length - 1] = lastBlock.html.replace(
+          /^<(table|div)/,
+          `<$1 data-covered="${cov.id}"`
+        )
+        const sink = lastBlock.sink
+        sink[sink.length - 1] = `<div class="covered">${sink[sink.length - 1]}` +
+          `<p class="cover-tag">${markGlyph(cov)} <span>${esc(cov.label)}</span></p></div>`
+        continue
+      }
+      push(`<p>${provenance(t.text)}</p>`)
+      continue
+    }
+
+    if (t.type === 'blockquote') { push(renderCallout(t)); continue }
+    if (t.type === 'list') { push(renderList(t)); continue }
+    if (t.type === 'table') { push(renderTable(t)); continue }
+    if (t.type === 'code') {
+      push(`<pre class="code"><code>${esc(t.text)}</code></pre>`)
+      continue
+    }
+    if (t.type === 'space') continue
+    push(marked.parser([t]))
+  }
+
+  for (const r of page.rules) {
+    if (!r.meta) { r.meta = { status: null, tests: [], sources: [] }; warn(`${r.id} has no metadata line`) }
+    r.status = r.meta.status
+    r.vocab = config.status[r.status]
+    if (!r.vocab) {
+      warn(`unmapped status token "${r.status}"`)
+      r.vocab = { label: r.status, tier: 'neutral', origin: 'asserted' }
+    }
+    // A declared basis overrides the bare status token. Rendering two rules
+    // identically when the corpus computed them to mean different things is
+    // the lie this whole axis exists to prevent.
+    const b = r.status === config.statusSidecar?.appliesTo && BASIS_VOCAB[BASIS[r.id]]
+    if (b) r.vocab = { label: b.label, tier: b.tier, origin: 'computed' }
+    r.caveats = caveatsFor(r.meta, r.status, r.id)
+  }
+  page.tally = tally
+  return page
+}
+
+/* ── block renderers ─────────────────────────────────────────────────────── */
+
+function renderList(t) {
+  const items = t.items.map((it) => {
+    const raw = it.tokens.map((x) => x.raw).join('')
+    const nested = it.tokens.filter((x) => x.type === 'list')
+    const own = it.tokens.filter((x) => x.type !== 'list')
+      .map((x) => x.raw).join('').trim()
+    return `<li>${provenance(own)}${nested.map(renderList).join('')}</li>`
+  }).join('')
+  return t.ordered ? `<ol>${items}</ol>` : `<ul>${items}</ul>`
+}
+
+// A legend is a <= 2-column table whose every first cell is exactly one
+// declared marker. It renders as a key using the SAME glyphs used inline:
+// showing the raw token would break the match the moment the token becomes
+// a designed glyph. It is also broken as a table -- the authored source is
+// `> | | |`, an empty header row every generic renderer paints as two blanks.
+function asLegend(t) {
+  if (t.header.length > 2) return null
+  if (!t.rows.length) return null
+  const rows = []
+  for (const r of t.rows) {
+    const cell = (r[0].text || '').trim().replace(/️/g, '')
+    const mk = MARKERS.find((m) => m.token === cell)
+    if (!mk) return null
+    rows.push({ mk, text: (r[1]?.text || '').trim() })
+  }
+  return rows
+}
+
+function renderTable(t) {
+  const legend = asLegend(t)
+  if (legend) {
+    return `<dl class="ev-key">` + legend.map(({ mk, text }) =>
+      `<div><dt>${markGlyph(mk)}<span class="k-name">${esc(mk.short)}</span></dt>` +
+      `<dd>${inline(text)}</dd></div>`).join('') + `</dl>`
+  }
+  const blank = t.header.every((h) => !(h.text || '').trim())
+  const head = blank ? '' : `<thead><tr>${t.header
+    .map((h) => `<th>${inline(h.text)}</th>`).join('')}</tr></thead>`
+  const rows = t.rows.map((r) => `<tr>${r
+    .map((c) => `<td>${provenance(c.text)}</td>`).join('')}</tr>`).join('')
+  return `<div class="table-wrap"><table${blank ? ' class="no-head"' : ''}>${head}<tbody>${rows}</tbody></table></div>`
+}
+
+// Callouts: two mechanical stamps plus an untyped fallback. Type at PARAGRAPH
+// granularity -- three of the corpus's most important blockquotes hold two
+// authorial acts in one block, and GitHub flattens them into one grey slab.
+function renderCallout(t) {
+  const paras = []
+  for (const b of t.tokens) {
+    if (b.type === 'paragraph') paras.push(b)
+    else if (b.type === 'table' || b.type === 'list' || b.type === 'code') paras.push(b)
+  }
+  const kindOf = (md) => /Generated by `tools\//.test(md) ? 'generated'
+    : /^\*\*Not yet documented\.\*\*/.test(md) ? 'placeholder' : 'note'
+
+  let html = ''
+  let group = []
+  const flush = (kind) => {
+    if (!group.length) return
+    html += `<aside class="note" data-kind="${kind}">${group.join('')}</aside>`
+    group = []
+  }
+  let current = null
+  for (const b of paras) {
+    if (b.type !== 'paragraph') {
+      group.push(b.type === 'table' ? renderTable(b) : b.type === 'list'
+        ? renderList(b) : `<pre class="code"><code>${esc(b.text)}</code></pre>`)
+      continue
+    }
+    const kind = kindOf(b.text)
+    if (current && kind !== current) { flush(current); }
+    current = kind
+    // Title lift, two clauses only. The probe's third clause shreds every
+    // generated page: it hoists a mid-sentence <strong> and leaves the body
+    // reading "...describes code that is . Statuses are computed...".
+    const lift = /^\*\*([^*]+)\*\*/.exec(b.text)
+    let title = null, rest = b.text
+    if (lift) {
+      const after = b.text.slice(lift[0].length)
+      const endsSentence = /[.?!]$/.test(lift[1].trim())
+      const ownsFirstLine = /^\s*(\n|$)/.test(after)
+      if (endsSentence || ownsFirstLine) {
+        title = lift[1].replace(/[.?!]$/, '')
+        rest = after.replace(/^\s*/, '')
+      }
+    }
+    group.push((title ? `<p class="note-title">${inline(title)}</p>` : '') +
+      (rest.trim() ? `<p>${provenance(rest)}</p>` : ''))
+  }
+  flush(current || 'note')
+  return html
+}
+
+/* ── page rendering ──────────────────────────────────────────────────────── */
+
+const TIER_MARK = {
+  confirmed:   '<svg viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="2.2"/></svg>',
+  unconfirmed: '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.3 8.9 8.4H1.1Z"/></svg>',
+  broken:      '<svg viewBox="0 0 10 10" aria-hidden="true"><rect x="1.4" y="1.4" width="7.2" height="7.2" rx="1.2"/></svg>',
+  neutral:     '<svg viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="2.2" fill="none" stroke-width="1.4"/></svg>',
+}
+
+function renderRule(rule, ctx) {
+  const v = rule.vocab
+  const caveat = rule.caveats.map((c) => c.text).join(' · ')
+  const asOf = v.origin === 'computed' ? ctx.computedAsOf : null
+
+  return `<article class="rule" id="${rule.anchor}" data-rule-id="${rule.id}"
+         data-tier="${v.tier}" data-origin="${v.origin}">
+  <h3 class="rule-h">
+    <a class="rule-id" href="#${rule.anchor}" data-copy="${rule.id}"
+       aria-label="${esc(rule.id)}, permalink">${esc(rule.id)}</a>
+    <span class="rule-statement">${inline(rule.statement)}</span>
+  </h3>
+  <div class="rule-body">${rule.body.join('\n')}</div>
+  <p class="rule-trust" data-tier="${v.tier}">
+    <span class="tier-mark" aria-hidden="true">${TIER_MARK[v.tier]}</span>
+    <span class="tier-label">${esc(v.label)}</span>
+    ${caveat ? `<span class="tier-caveat">${esc(caveat)}</span>` : ''}
+    <span class="tier-origin">${v.origin === 'computed'
+      ? `computed ${asOf ? `· ${asOf}` : ''}` : 'stated by an author'}</span>
+  </p>
+  ${renderWarrant(rule.meta)}
+</article>`
+}
+
+function renderRail(page) {
+  if (!page.rules.length) return ''
+  const prefix = page.rules[0].id.split('-')[0]
+  const groups = page.sections.filter((s) => s.rules.length || s.title).map((s) => {
+    const chips = s.rules.map((r) => {
+      const n = r.id.split('-')[1]
+      return `<a class="chip" href="#${r.anchor}" data-tier="${r.vocab.tier}"
+        aria-label="${esc(r.id)}: ${esc(r.statement.replace(/[*_`]/g, ''))}">${esc(n)}</a>`
+    }).join('')
+    return `<li><a class="rail-sec" href="#${s.id}">${esc(s.title)}</a>` +
+      (chips ? `<div class="chips">${chips}</div>` : '') + `</li>`
+  }).join('')
+  return `<nav class="rail" aria-label="Rules on this page">
+  <p class="rail-h">${esc(prefix)}-0xx <span>${page.rules.length}</span></p>
+  <ul>${groups}</ul>
+</nav>`
+}
+
+function renderProvenanceStrip(page, tally) {
+  const d = page.data
+  // Only a page that CLAIMS a walk gets the strip. On a rules page the
+  // `verified:` date already rides in the warrant line, and rendering both
+  // duplicates it, which is the drift failure this corpus names three times.
+  if (!d['walked-by-agent']) return ''
+  const total = Object.values(tally).reduce((a, b) => a + b, 0)
+  const fromSource = tally['from-source'] || 0
+  const rows = []
+  rows.push(['Human-verified', d.verified === 'never'
+    ? '<span data-tone="pending">never</span>' : esc(d.verified || 'never')])
+  if (d['walked-by-agent']) rows.push(['Agent walk', esc(d['walked-by-agent'])])
+  if (d['walked-in']) rows.push(['Walked in', esc(d['walked-in'])])
+  if (total) rows.push(['Claims', `${total} <span class="pv-split">${fromSource} from source</span>`])
+  return `<header class="page-provenance"><dl>` +
+    rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('') +
+    `</dl></header>`
+}
+
+function renderPage(page, ctx) {
+  const unconfirmed = page.rules.filter((r) => r.vocab.tier !== 'confirmed')
+  const ahead = unconfirmed.length ? `<p class="page-ahead">
+    <span>Behaviour can change at the next promotion, ${unconfirmed.length} of ${page.rules.length}:</span>
+    ${unconfirmed.map((r) => `<a href="#${r.anchor}">${esc(r.id)}</a>`).join('')}</p>` : ''
+
+  const kind = page.relPath.startsWith('rules/') ? 'Rule'
+    : page.relPath.startsWith('flows/') ? 'Flow'
+    : page.relPath.startsWith('guides/') ? 'Guide' : 'Page'
+  const area = config.areaLabels[page.data.area?.toLowerCase()] || page.data.area || ''
+
+  const dist = page.rules.length
+    ? Object.entries(page.rules.reduce((a, r) => {
+        a[r.vocab.tier] = (a[r.vocab.tier] || 0) + 1; return a
+      }, {})).map(([t, n]) =>
+        `<span class="d-seg" data-tier="${t}">${TIER_MARK[t]}${n}</span>`).join('')
+    : ''
+
+  // A `##` that groups rules is structural furniture and is set as a label.
+  // A `##` on a guide or flow is a content heading and must read as one.
+  const body = page.sections.map((s) => `<section class="${
+    s.rules.length ? 'rule-group' : 'prose-group'}" id="${s.id}">
+    <h2>${inline(s.title)}${s.rules.length
+      ? `<span class="sec-range">${s.rules[0].id} to ${s.rules[s.rules.length - 1].id}</span>` : ''}</h2>
+    ${s.body.join('\n')}
+    ${s.rules.map((r) => renderRule(r, ctx)).join('\n')}
+  </section>`).join('\n')
+
+  const warrantBits = [`<span class="w-kind">${kind}</span>`]
+  if (area) warrantBits.push(`<span>${esc(area)}</span>`)
+  if (dist) warrantBits.push(`<span class="w-dist">${dist}</span>`)
+  if (page.data.verified && page.data.verified !== 'never') {
+    warrantBits.push(`<span>Verified ${esc(page.data.verified)}</span>`)
+  }
+
+  return { html: `<div class="page-warrant">${
+    warrantBits.join('<span class="w-sep" aria-hidden="true">·</span>')}</div>
+${renderProvenanceStrip(page, page.tally)}
+<h1>${inline(page.title)}</h1>
+${page.lead.join('\n')}
+${ahead}
+${body}` }
+}
+
+/* ── shell ───────────────────────────────────────────────────────────────── */
+
+const hasCustomCss = fs.existsSync(path.join(CORPUS, 'docs.css'))
+function shell({ title, main, rail, nav, accent }) {
+  return `<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(title)} · ${esc(config.name)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="viewer.css">
+${hasCustomCss ? '<link rel="stylesheet" href="docs.css">' : ''}
+<style>:root{--accent:${accent};--accent-ring:color-mix(in srgb,${accent} 32%,transparent);--accent-fill:color-mix(in srgb,${accent} 7%,transparent)}
+:root[data-theme="dark"]{--accent:color-mix(in oklch,${accent} 72%,white);--accent-ring:color-mix(in srgb,${accent} 40%,transparent);--accent-fill:color-mix(in srgb,${accent} 17%,transparent)}</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <div class="top-in">
+    <a class="mark" href="index.html"><span class="mark-dot"></span>${esc(config.name)}</a>
+    <div class="top-r">
+      <button class="search-open" type="button" aria-label="Search">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.4" fill="none" stroke-width="1.7"/><path d="M10.4 10.4 14 14" stroke-width="1.7" fill="none" stroke-linecap="round"/></svg>
+        <span>Search</span><kbd>/</kbd>
+      </button>
+      <button class="theme" type="button" aria-label="Switch to dark theme" aria-pressed="false">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.2 9.6A5.6 5.6 0 0 1 6.4 2.8 5.6 5.6 0 1 0 13.2 9.6Z"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+<div class="frame">
+  <nav class="side" aria-label="Documentation">${nav}</nav>
+  <main id="main">${main}</main>
+  ${rail}
+</div>
+<div class="keybar" hidden aria-hidden="true"></div>
+<script src="viewer.js"></script>
+</body>
+</html>`
+}
+
+function renderNav(pages, current) {
+  const byPath = Object.fromEntries(pages.map((p) => [p.relPath, p]))
+  // Nav labels come from the H1 minus a declared area prefix at the em dash:
+  // The short label often exists nowhere in the corpus; it is derived.
+  const label = (rel) => {
+    const area = /^rules\/([^/]+)\/index\.md$/.exec(rel)
+    if (area && config.areaLabels[area[1]]) return config.areaLabels[area[1]]
+    const pg = byPath[rel]
+    if (!pg) return rel
+    const dash = pg.title.indexOf(' — ')
+    return dash === -1 ? pg.title : pg.title.slice(dash + 3)
+  }
+  const link = (rel, cls = '') => `<li${cls}><a href="${htmlName(rel)}"${
+    rel === current ? ' aria-current="page"' : ''}>${esc(label(rel))}</a></li>`
+
+  // The Rules group is a ledger: area, rule count, and the confirmed share as a
+  // proportional strip. The 26 undocumented areas are their OWN declared group
+  // now, so the nav no longer has to invent a way to show emptiness without
+  // making the spine look like a graveyard. The corpus settled that.
+  const rulesLedger = (paths) => {
+    const areas = new Map()
+    for (const rel of paths) {
+      const dir = rel.split('/')[1]
+      if (!areas.has(dir)) areas.set(dir, [])
+      areas.get(dir).push(rel)
+    }
+    return [...areas].map(([dir, rels]) => {
+      const topics = rels.filter((r) => !r.endsWith('index.md'))
+      const n = topics.reduce((a, r) => a + (byPath[r]?.rules.length || 0), 0)
+      const tiers = topics.flatMap((r) => (byPath[r]?.rules || []).map((x) => x.vocab.tier))
+      const conf = tiers.filter((t) => t === 'confirmed').length
+      const strip = n ? `<span class="strip" role="img"
+        aria-label="${conf} of ${n} match production">
+        <span style="flex:${conf}" data-tier="confirmed"></span>
+        <span style="flex:${n - conf}" data-tier="unconfirmed"></span></span>` : ''
+      return `<li class="area"><div class="area-row"><span>${
+        esc(config.areaLabels[dir] || dir)}</span>${strip}<span class="area-n">${n}</span></div>
+        <ul>${topics.map((r) => link(r)).join('')}</ul></li>`
+    }).join('')
+  }
+
+  return navGroups.map((g) => {
+    const note = GROUP_NOTE[g.group]
+    const head = `<h2>${esc(g.group)}${note ? `<span>${esc(note)}</span>` : ''}</h2>`
+    if (g.group === 'Rules') {
+      return `<section class="nav-g">${head}<ul class="ledger">${rulesLedger(g.pages)}</ul></section>`
+    }
+    // A declared group of nothing-but-stubs is set back so it reads as the
+    // burn-down it is, not as a second, larger Rules section.
+    const gap = g.pages.every((r) => !(byPath[r]?.rules.length))
+      && g.pages.length > 6
+    return `<section class="nav-g${gap ? ' is-gap' : ''}">${head}<ul>${
+      g.pages.map((r) => link(r)).join('')}</ul></section>`
+  }).join('')
+}
+
+const htmlName = (rel) => rel.replace(/\//g, '-').replace(/\.md$/, '.html')
+
+/* ── run ─────────────────────────────────────────────────────────────────── */
+
+fs.mkdirSync(OUT, { recursive: true })
+const ctx = { computedAsOf: readGeneratedDate(CORPUS, config) }
+const pages = config.publish.map(buildPage)
+const ruleIndex = Object.fromEntries(pages.flatMap((p) =>
+  p.rules.map((r) => [r.id, { ...r, page: p.relPath }])))
+
+for (const page of pages) {
+  const { html } = renderPage(page, ctx)
+  // Links must be RESOLVED against the source page's directory, never matched
+  // as strings. `[…](../billing/invoices.md)` from rules/accounts/ is
+  // rules/billing/invoices.md, and treating it as unpublished silently
+  // downgrades a live link to grey text. A directory link resolves to its
+  // index.md, which is how the corpus writes `../assets/`.
+  const dir = path.posix.dirname(page.relPath)
+  const resolveRel = (href) => {
+    let t = path.posix.normalize(path.posix.join(dir, href))
+    if (t.endsWith('/')) t += 'index.md'
+    else if (!t.endsWith('.md')) t += '/index.md'
+    return t
+  }
+  const resolved = html
+    .replace(/href="((?:\.\.?\/)[^"#]*)(#[\w-]+)?"/g, (m, href, frag) => {
+      const t = resolveRel(href)
+      if (config.publish.includes(t)) return `href="${htmlName(t)}${frag || ''}"`
+      if (!fs.existsSync(path.join(CORPUS, t))) warn(`broken link ${page.relPath} -> ${href}`)
+      return `data-inert="${esc(t)}"`
+    })
+    .replace(/<a data-inert="([^"]+)">([\s\S]*?)<\/a>/g,
+      (m, t, txt) => `<span class="link-inert" title="Not published in this site">${txt}</span>`)
+  const out = shell({
+    title: page.title, main: resolved, rail: renderRail(page),
+    nav: renderNav(pages, page.relPath), accent: config.accent,
+  })
+  fs.writeFileSync(path.join(OUT, htmlName(page.relPath)), out)
+}
+
+// rules.json — the machine surface the MCP queries.
+fs.writeFileSync(path.join(OUT, 'rules.json'), JSON.stringify({
+  schema: 1, generatedAt: ctx.computedAsOf, name: config.name,
+  rules: Object.values(ruleIndex).map((r) => ({
+    id: r.id, statement: r.statement, page: r.page, anchor: r.anchor,
+    status: r.status, tier: r.vocab.tier, origin: r.vocab.origin,
+    caveats: r.caveats, tests: r.meta.tests, sources: r.meta.sources,
+  })),
+}, null, 2))
+
+for (const f of ['tokens.css', 'viewer.css', 'viewer.js']) {
+  fs.copyFileSync(path.join(THEME, f), path.join(OUT, f))
+}
+// An optional per-corpus override, copied last so it always wins the cascade.
+const custom = path.join(CORPUS, 'docs.css')
+if (fs.existsSync(custom)) fs.copyFileSync(custom, path.join(OUT, 'docs.css'))
+
+const home = config.publish[0]
+if (home) fs.copyFileSync(path.join(OUT, htmlName(home)), path.join(OUT, 'index.html'))
+
+return { pages: pages.map((p) => ({ path: p.relPath, rules: p.rules.length })),
+         ruleCount: Object.keys(ruleIndex).length, out: OUT, warnings }
+}
+
+// The corpus states the ref and date its computed statuses were read from.
+// Deriving it from the clock instead would put a fresh date on a stale answer.
+function readGeneratedDate(corpus, cfg) {
+  const rel = cfg?.statusSidecar?.path
+  if (!rel) return null
+  const p = path.join(corpus, rel)
+  if (!fs.existsSync(p)) return null
+  const m = /_Generated ([0-9]{4}-[0-9]{2}-[0-9]{2})\._/.exec(fs.readFileSync(p, 'utf8'))
+  return m ? m[1] : null
+}

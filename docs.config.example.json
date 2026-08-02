@@ -1,0 +1,34 @@
+{
+  "accent": "#5B57E8",
+
+  "areaLabels": {
+    "user-mgmt": "Users and teams",
+    "billing-v2": "Billing",
+    "svc-notifications": "Notifications"
+  },
+
+  "evidence": {
+    "coverageWords": ["all", "both", "each", "every"],
+    "markers": [
+      { "token": "✅", "id": "seen", "short": "seen",
+        "label": "seen rendering in the browser", "glyph": "solid" },
+      { "token": "📄", "id": "from-source", "short": "from source",
+        "label": "read from source, silent about what renders", "glyph": "dashed" }
+    ]
+  },
+
+  "statusSidecar": {
+    "path": "meta/status.md",
+    "appliesTo": "in-stage",
+    "groups": {
+      "Implementation moved": {
+        "id": "changed", "label": "Changed since production", "tier": "unconfirmed",
+        "caveat": "behaviour can change at the next release"
+      },
+      "Evidence only": {
+        "id": "newly-tested", "label": "Live in production", "tier": "confirmed",
+        "caveat": "the test proving it is newer than production"
+      }
+    }
+  }
+}
