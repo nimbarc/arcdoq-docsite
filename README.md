@@ -115,6 +115,13 @@ emoji. The feature is declared provenance notation, not emoji support.
 **Monospace is a citation typeface, not a mood.** It is used only on strings
 that paste into a tool: IDs, paths, test names, code. Prose stays prose.
 
+**It is built to be read on a phone, not merely to fit one.** Below 720px the
+mark column folds into the heading: the ID and the verdict take one row, the
+statement takes the full measure below them. The sticky ID rail is *replaced* in
+the flow rather than hidden, because the reader still arrived holding an ID.
+Two-column tables stack into term-and-definition pairs; wider ones keep their
+columns and scroll, because a matrix does not survive being stacked.
+
 ## Output
 
 ```
@@ -155,6 +162,13 @@ treated as a claim, that claim counts come from the render so the page cannot
 disagree with itself, that a relative link resolves against its own directory,
 and that a declared status sidecar splits one token into its two meanings while
 declaring nothing degrades to less detail rather than a wrong answer.
+
+They also cover the parts a phone depends on: that the ID is a sibling of the
+heading rather than inside it, that a rules page carries an ID index for the
+widths where the sticky rail cannot exist, that a two-column table carries what
+is needed to stack it while a three-column one does not, and — running the
+shipped `viewer.js` against a small fake DOM — that the client layer survives a
+load with no fragment, which is every load that is not a deep link.
 
 The fixture is invented. Nothing in this package is shaped around one corpus.
 

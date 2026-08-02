@@ -126,6 +126,13 @@ function frontmatter(src) {
       data[key][data[key].length - 1] += ' ' + raw.trim()
     }
   }
+  // A key with no inline value is provisionally a list, because that is how
+  // `sources:` introduces its `- ` items. One that never received an item was
+  // simply empty, and leaving it as [] hands an array to every reader that
+  // expects a string — `verified:` alone on a line crashed the render.
+  for (const k of Object.keys(data)) {
+    if (Array.isArray(data[k]) && !data[k].length) data[k] = ''
+  }
   return { data, body: src.slice(m[0].length) }
 }
 
@@ -468,9 +475,16 @@ function buildPage(relPath) {
     if (!r.meta) { r.meta = { status: null, tests: [], sources: [] }; warn(`${r.id} has no metadata line`) }
     r.status = r.meta.status
     r.vocab = config.status[r.status]
+    // Two different absences. A token nobody mapped still names itself, so it
+    // renders as written at the neutral tier. A rule with no metadata line at
+    // all has nothing to name — `label: null` reached esc() and took the whole
+    // build down, which contradicted the warn-and-continue two lines above.
+    // Neither may borrow "stated by an author": nobody stated anything.
     if (!r.vocab) {
-      warn(`unmapped status token "${r.status}"`)
-      r.vocab = { label: r.status, tier: 'neutral', origin: 'asserted' }
+      if (r.status) warn(`unmapped status token "${r.status}"`)
+      r.vocab = r.status
+        ? { label: r.status, tier: 'neutral', origin: 'asserted' }
+        : { label: 'No status recorded', tier: 'neutral', origin: 'none' }
     }
     // A declared basis overrides the bare status token. Rendering two rules
     // identically when the corpus computed them to mean different things is
@@ -524,9 +538,18 @@ function renderTable(t) {
   const blank = t.header.every((h) => !(h.text || '').trim())
   const head = blank ? '' : `<thead><tr>${t.header
     .map((h) => `<th>${inline(h.text)}</th>`).join('')}</tr></thead>`
+  // The column count and each cell's own header travel with the markup so the
+  // stylesheet can stack a two-column table into definition pairs on a phone
+  // without a second pass over the DOM. The label rides only on cells AFTER the
+  // first: the first cell is the term, which needs no label, and a headerless
+  // table gets none at all.
+  const cols = Math.max(t.header.length, ...t.rows.map((r) => r.length))
+  const label = (i) => (cols === 2 && i > 0 && !blank && t.header[i]?.text)
+    ? ` data-label="${esc(t.header[i].text.trim())}"` : ''
   const rows = t.rows.map((r) => `<tr>${r
-    .map((c) => `<td>${provenance(c.text)}</td>`).join('')}</tr>`).join('')
-  return `<div class="table-wrap"><table${blank ? ' class="no-head"' : ''}>${head}<tbody>${rows}</tbody></table></div>`
+    .map((c, i) => `<td${label(i)}>${provenance(c.text)}</td>`).join('')}</tr>`).join('')
+  return `<div class="table-wrap"><table data-cols="${cols}"${
+    blank ? ' class="no-head"' : ''}>${head}<tbody>${rows}</tbody></table></div>`
 }
 
 // Callouts: two mechanical stamps plus an untyped fallback. Type at PARAGRAPH
@@ -593,29 +616,32 @@ function renderRule(rule, ctx) {
   const caveat = rule.caveats.map((c) => c.text).join(' · ')
   const asOf = v.origin === 'computed' ? ctx.computedAsOf : null
 
+  // The ID is a SIBLING of the heading, not a child of it. Two reasons, and the
+  // second is why it moved: the heading's accessible name is then the statement
+  // alone rather than "ORD-001, permalink An order cannot be…", and the ID and
+  // the verdict become siblings, which is the only way they can share a row
+  // when the mark column folds on a phone without putting a status string
+  // inside an <h3>.
   return `<article class="rule" id="${rule.anchor}" data-rule-id="${rule.id}"
          data-tier="${v.tier}" data-origin="${v.origin}">
-  <h3 class="rule-h">
-    <a class="rule-id" href="#${rule.anchor}" data-copy="${rule.id}"
-       aria-label="${esc(rule.id)}, permalink">${esc(rule.id)}</a>
-    <span class="rule-statement">${inline(rule.statement)}</span>
-  </h3>
+  <a class="rule-id" href="#${rule.anchor}" data-copy="${rule.id}"
+     aria-label="${esc(rule.id)}, permalink">${esc(rule.id)}</a>
+  <h3 class="rule-statement">${inline(rule.statement)}</h3>
   <div class="rule-body">${rule.body.join('\n')}</div>
   <p class="rule-trust" data-tier="${v.tier}">
     <span class="tier-mark" aria-hidden="true">${TIER_MARK[v.tier]}</span>
     <span class="tier-label">${esc(v.label)}</span>
     ${caveat ? `<span class="tier-caveat">${esc(caveat)}</span>` : ''}
     <span class="tier-origin">${v.origin === 'computed'
-      ? `computed ${asOf ? `· ${asOf}` : ''}` : 'stated by an author'}</span>
+      ? `computed ${asOf ? `· ${asOf}` : ''}`
+      : v.origin === 'asserted' ? 'stated by an author' : ''}</span>
   </p>
   ${renderWarrant(rule.meta)}
 </article>`
 }
 
-function renderRail(page) {
-  if (!page.rules.length) return ''
-  const prefix = page.rules[0].id.split('-')[0]
-  const groups = page.sections.filter((s) => s.rules.length || s.title).map((s) => {
+function railGroups(page) {
+  return page.sections.filter((s) => s.rules.length || s.title).map((s) => {
     const chips = s.rules.map((r) => {
       const n = r.id.split('-')[1]
       return `<a class="chip" href="#${r.anchor}" data-tier="${r.vocab.tier}"
@@ -624,10 +650,34 @@ function renderRail(page) {
     return `<li><a class="rail-sec" href="#${s.id}">${esc(s.title)}</a>` +
       (chips ? `<div class="chips">${chips}</div>` : '') + `</li>`
   }).join('')
+}
+
+function renderRail(page) {
+  if (!page.rules.length) return ''
+  const prefix = page.rules[0].id.split('-')[0]
   return `<nav class="rail" aria-label="Rules on this page">
   <p class="rail-h">${esc(prefix)}-0xx <span>${page.rules.length}</span></p>
-  <ul>${groups}</ul>
+  <ul>${railGroups(page)}</ul>
 </nav>`
+}
+
+// Below the rail's breakpoint the sticky column is gone, and nothing replaced
+// it: on a phone there was no way to reach a rule by the one key the reader
+// arrived holding. This is the same chip index, in the flow, closed.
+//
+// A <details> is rejected for the warrant because a closed one is invisible to
+// find-in-page in Firefox and Safari and the citations exist nowhere else on
+// the page. Neither objection holds here: every chip is a second copy of a rule
+// ID that is still in the document as a heading, and this is ONE control for
+// the page rather than three per rule. It is closed on arrival because the
+// dominant journey lands mid-page on a deep link; the index is the second
+// action, not the first. No JavaScript is involved in opening it.
+function renderRailFlow(page) {
+  if (!page.rules.length) return ''
+  return `<details class="rail-flow">
+  <summary>Rules on this page <span>${page.rules.length}</span></summary>
+  <ul>${railGroups(page)}</ul>
+</details>`
 }
 
 function renderProvenanceStrip(page, tally) {
@@ -690,6 +740,7 @@ ${renderProvenanceStrip(page, page.tally)}
 <h1>${inline(page.title)}</h1>
 ${page.lead.join('\n')}
 ${ahead}
+${renderRailFlow(page)}
 ${body}` }
 }
 
@@ -767,15 +818,27 @@ function renderNav(pages, current) {
     }
     return [...areas].map(([dir, rels]) => {
       const topics = rels.filter((r) => !r.endsWith('index.md'))
-      const n = topics.reduce((a, r) => a + (byPath[r]?.rules.length || 0), 0)
-      const tiers = topics.flatMap((r) => (byPath[r]?.rules || []).map((x) => x.vocab.tier))
+      const index = rels.find((r) => r.endsWith('index.md'))
+      // Counted over every page in the area, index included. Counting only the
+      // topics reports 0 for an area that writes its rules in its own index.
+      const n = rels.reduce((a, r) => a + (byPath[r]?.rules.length || 0), 0)
+      const tiers = rels.flatMap((r) => (byPath[r]?.rules || []).map((x) => x.vocab.tier))
       const conf = tiers.filter((t) => t === 'confirmed').length
       const strip = n ? `<span class="strip" role="img"
         aria-label="${conf} of ${n} match production">
         <span style="flex:${conf}" data-tier="confirmed"></span>
         <span style="flex:${n - conf}" data-tier="unconfirmed"></span></span>` : ''
-      return `<li class="area"><div class="area-row"><span>${
-        esc(config.areaLabels[dir] || dir)}</span>${strip}<span class="area-n">${n}</span></div>
+      // The area label carries the link to its own index. Without it that page
+      // is published, reachable and yet named nowhere in the nav — and because
+      // the mobile nav shows only the group holding the current page, and that
+      // is decided by aria-current, arriving there rendered an empty sidebar.
+      const name = esc(config.areaLabels[dir] || dir)
+      const head = index
+        ? `<a href="${htmlName(index)}"${
+            index === current ? ' aria-current="page"' : ''}>${name}</a>`
+        : name
+      return `<li class="area"><div class="area-row"><span>${head}</span>${
+        strip}<span class="area-n">${n}</span></div>
         <ul>${topics.map((r) => link(r)).join('')}</ul></li>`
     }).join('')
   }
@@ -802,8 +865,33 @@ const htmlName = (rel) => rel.replace(/\//g, '-').replace(/\.md$/, '.html')
 fs.mkdirSync(OUT, { recursive: true })
 const ctx = { computedAsOf: readGeneratedDate(CORPUS, config) }
 const pages = config.publish.map(buildPage)
-const ruleIndex = Object.fromEntries(pages.flatMap((p) =>
-  p.rules.map((r) => [r.id, { ...r, page: p.relPath }])))
+
+// htmlName flattens the separator, so `a/b-c.md` and `a-b/c.md` are one file
+// and the second write replaced the first with no sign that a page was gone.
+// The scheme is not changing — every published URL depends on it — so the
+// collision is reported instead, and --strict turns it into a failed build.
+const byFile = new Map()
+for (const rel of config.publish) {
+  const f = htmlName(rel)
+  if (byFile.has(f)) warn(`${rel} and ${byFile.get(f)} both build to ${f}`)
+  else byFile.set(f, rel)
+}
+
+// An ID declared twice used to collapse to whichever page was rendered last,
+// and the other rule left the machine surface entirely: absent from rules.json,
+// so an agent asking "which rules are unconfirmed" is answered from a corpus
+// that is quietly missing one. IDs are sequential and never reused, so this is
+// a corpus error; the first declaration wins and the clash is named.
+const ruleIndex = {}
+for (const p of pages) {
+  for (const r of p.rules) {
+    if (ruleIndex[r.id]) {
+      warn(`${r.id} is declared on both ${ruleIndex[r.id].page} and ${p.relPath}`)
+      continue
+    }
+    ruleIndex[r.id] = { ...r, page: p.relPath }
+  }
+}
 
 for (const page of pages) {
   const { html } = renderPage(page, ctx)
@@ -819,8 +907,20 @@ for (const page of pages) {
     else if (!t.endsWith('.md')) t += '/index.md'
     return t
   }
+  // Two shapes of corpus link reach this, and only one used to be recognised.
+  // `../billing/invoices.md` announces itself with a prefix. `rules/orders/
+  // lifecycle.md` — which is how this corpus's own README writes them, and the
+  // more natural way to write one — has no prefix at all, so it fell through
+  // untouched and shipped as a live href to a .md file that no host serves.
+  //
+  // A prefixless link has to be recognised by its TARGET instead: a corpus
+  // link names a `.md` file or a directory. That is also what keeps this off
+  // the nav, whose hrefs are already `.html` by the time this runs, and off
+  // `#main`, `tokens.css` and every absolute URL in the shell.
+  const CORPUS_LINK =
+    /href="(?!#)(?!\w+:)(?!\/)((?:\.{1,2}\/[^"#]*)|(?:[^"#:]*(?:\.md|\/)))(#[\w-]+)?"/g
   const resolved = html
-    .replace(/href="((?:\.\.?\/)[^"#]*)(#[\w-]+)?"/g, (m, href, frag) => {
+    .replace(CORPUS_LINK, (m, href, frag) => {
       const t = resolveRel(href)
       if (config.publish.includes(t)) return `href="${htmlName(t)}${frag || ''}"`
       if (!fs.existsSync(path.join(CORPUS, t))) warn(`broken link ${page.relPath} -> ${href}`)

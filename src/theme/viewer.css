@@ -174,8 +174,21 @@ main {
 .strip > span { border-radius: 1px; }
 .strip > span[data-tier='confirmed']   { background: var(--tier-confirmed-mark); }
 .strip > span[data-tier='unconfirmed'] { background: var(--tier-unconfirmed); }
+/* The area label is the link to that area's index when the corpus declares
+   one, but it stays looking like a label: this row is a ledger line carrying a
+   count and a share, not a nav item. */
+.area-row a {
+  display: inline; padding: 0; margin: 0; border-radius: 0;
+  background: none; color: inherit; text-decoration: none;
+}
+.area-row a:hover { color: var(--ink); }
+.area-row a[aria-current='page'] { background: none; color: var(--ink); font-weight: 600; }
+
 .area > ul { margin: 0 0 9px 0; }
-.area > ul a { font-size: 13px; padding-left: 10px; }
+/* Indented past the area label, not level with it. At 10px the child's text
+   landed one pixel to the LEFT of its parent's, because .side a carries a
+   -9px margin, and the ledger read as a flat list of unrelated names. */
+.area > ul a { font-size: 13px; padding-left: 22px; }
 
 /* ── page warrant: replaces the breadcrumb ───────────────────────────────── */
 
@@ -240,7 +253,10 @@ main h3 { font-size: 16.5px; font-weight: 600; letter-spacing: -0.014em; color: 
 .page-ahead a {
   font: 500 11.5px/1 'JetBrains Mono', monospace;
   color: var(--ink-2); text-decoration: none;
-  padding: 3px 6px; border-radius: 5px; background: var(--canvas);
+  /* These are tap targets on a phone, where this box is one of the few things
+     on the page you are meant to hit. 11.5px of text in 3px of padding is 19px. */
+  display: inline-flex; align-items: center; min-height: 24px;
+  padding: 3px 8px; border-radius: 5px; background: var(--canvas);
   border: 1px solid var(--line-soft);
 }
 .page-ahead a:hover { border-color: var(--tier-unconfirmed); color: var(--ink); }
@@ -256,23 +272,21 @@ main h3 { font-size: 16.5px; font-weight: 600; letter-spacing: -0.014em; color: 
   scroll-margin-top: 74px;
 }
 
-.rule-h {
-  grid-column: 1 / -1;
-  display: grid; grid-template-columns: subgrid;
-  align-items: baseline;
-  margin: 0 0 9px;
-}
+/* Every part of the atom is placed explicitly rather than flowing, because the
+   two margin-column items (ID, verdict) sit in a different visual order from
+   the DOM order that assistive tech has to hear. Explicit placement is also
+   what lets the whole thing re-form on a phone by changing four lines. */
 .rule-id {
+  grid-column: 1; grid-row: 1; align-self: baseline; justify-self: start;
   font-size: 12.5px; font-weight: 600; letter-spacing: 0.01em;
   color: var(--ink-3); text-decoration: none;
   font-variant-numeric: tabular-nums;
   display: inline-block; padding: 2px 0;
 }
-.rule-id::before {
-  content: ''; display: inline-block; width: 0; height: 0;
-}
 .rule:hover .rule-id, .rule-id:focus-visible { color: var(--accent); }
 .rule-statement {
+  grid-column: 2; grid-row: 1; align-self: baseline;
+  margin: 0 0 9px;
   font-size: 17.5px; font-weight: 600; line-height: 1.36;
   letter-spacing: -0.017em; color: var(--ink);
   max-width: 46ch;
@@ -388,11 +402,14 @@ main h3 { font-size: 16.5px; font-weight: 600; letter-spacing: -0.014em; color: 
 .ev-key dd { margin: 0; color: var(--ink-3); font-size: 12.5px; }
 
 .covered { position: relative; }
+/* flex-start, not center: the label wraps to two and three lines at phone
+   widths, and centring floats the glyph into the gap between them where it
+   reads as belonging to neither line. */
 .cover-tag {
   margin: 6px 0 0; font-size: 11.5px; color: var(--ink-4);
-  display: flex; align-items: center; gap: 6px;
+  display: flex; align-items: flex-start; gap: 6px;
 }
-.cover-tag .ev-mark { margin-left: 0; }
+.cover-tag .ev-mark { margin-left: 0; margin-top: 0.28em; }
 
 .page-provenance {
   margin: 0 0 26px; padding: 14px 16px;
@@ -513,6 +530,49 @@ table.no-head thead { display: none; }
   font-weight: 600;
 }
 
+/* ── the in-flow ID index ────────────────────────────────────────────────── */
+
+/* It exists only at the widths where the sticky rail does not, so the two are
+   never both on screen and the duplicate chips are never both findable. */
+.rail-flow { display: none; }
+
+@media screen and (max-width: 1180px) {
+  .rail-flow {
+    display: block; margin: 26px 0 0;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--surface-1);
+  }
+  .rail-flow > summary {
+    display: flex; align-items: center; gap: 9px;
+    min-height: 44px; padding: 0 14px; cursor: pointer;
+    list-style: none; font-size: 12.5px; color: var(--ink-2);
+  }
+  .rail-flow > summary::-webkit-details-marker { display: none; }
+  .rail-flow > summary > span {
+    font: 500 11px/1 'JetBrains Mono', monospace; color: var(--ink-4);
+    font-variant-numeric: tabular-nums;
+  }
+  .rail-flow > summary::after {
+    content: ''; width: 7px; height: 7px; margin-left: auto;
+    border-right: 1.5px solid var(--ink-4);
+    border-bottom: 1.5px solid var(--ink-4);
+    transform: translateY(-2px) rotate(45deg);
+    transition: transform .16s var(--ease-quint);
+  }
+  .rail-flow[open] > summary::after { transform: translateY(2px) rotate(-135deg); }
+  .rail-flow ul { list-style: none; margin: 0; padding: 2px 14px 14px; }
+  .rail-flow li + li { margin-top: 15px; }
+  .rail-flow .rail-sec {
+    display: block; color: var(--ink-3); text-decoration: none;
+    font-size: 11.5px; line-height: 1.35; margin-bottom: 7px;
+  }
+  /* Thumb-sized rather than pointer-sized. The sticky rail's 24px chips are a
+     mouse target in a 196px column; these are the only way to reach a rule by
+     ID on a phone and get hit with a thumb. */
+  .rail-flow .chips { gap: 6px; }
+  .rail-flow .chip { min-width: 40px; height: 32px; font-size: 11.5px; }
+}
+
 /* ── target persistence ──────────────────────────────────────────────────── */
 
 /* The frame persists; it is not a fade. A rule is often qualified by another
@@ -538,6 +598,11 @@ table.no-head thead { display: none; }
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--line-soft);
 }
+/* `display: flex` outranks the UA sheet's `[hidden] { display: none }`, so
+   without this the bar paints on every page that has no legend to dock — a
+   15px translucent strip pinned under the header, empty, swallowing every tap
+   across the full width of the viewport. */
+.keybar[hidden] { display: none; }
 .keybar > span { display: inline-flex; align-items: center; gap: 6px; }
 .keybar .ev-mark { margin-left: 0; }
 .keybar .kb-state { margin-left: auto; color: var(--ink-4); }
@@ -585,47 +650,93 @@ table.no-head thead { display: none; }
 
 /* ── responsive ──────────────────────────────────────────────────────────── */
 
-@media (max-width: 1180px) {
+@media screen and (max-width: 1180px) {
   .frame { grid-template-columns: 232px minmax(0, 1fr); }
   .rail { display: none; }
   main { --mark-w: 10rem; }
 }
 
-@media (max-width: 860px) {
+@media screen and (max-width: 860px) {
+  /* The 28px left offset is the desktop spine anchor, and it has to be undone
+     here or the gutters go asymmetric: it survives into the one-column layout
+     and stacks on top of the padding, putting the content 46px from the left
+     edge and 18px from the right. There is no spine to anchor to at this
+     width — a single column just needs matching gutters. */
+  .frame, .top-in { margin-inline: 0; padding: 0 20px; }
   .frame { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .side {
     position: static; max-height: none; padding: 20px 0 8px;
+    /* The column boundary is gone here, so the hairline that drew it has to go
+       too, or it runs down the right of a full-width block and meets the
+       bottom border as a stray L. */
+    border-right: 0;
     border-bottom: 1px solid var(--line-soft); margin-bottom: 10px;
   }
-  .side .nav-g { display: none; }
-  .side .nav-g:has(a[aria-current='page']) { display: block; }
+  /* Collapsed to the group holding the current page. Guarded by @supports,
+     because the hiding rule is plain CSS and the unhiding rule is not: an
+     engine without :has() drops line two, keeps line one, and renders an empty
+     sidebar on every page of the site. The fallback has to be the whole nav,
+     never nothing. */
+  @supports selector(:has(a)) {
+    .side .nav-g { display: none; }
+    .side .nav-g:has(a[aria-current='page']) { display: block; }
+  }
   main { padding-top: 22px; }
 }
 
 /* Below the collapse point the mark column folds into the heading: ID and
-   verdict share row one, statement below. Tested against WS-012, whose
-   statement is 101 characters. */
-@media (max-width: 720px) {
+   verdict share row one, statement below. The two of them are the margin
+   channel, so they fold together; the statement then owns the full measure
+   instead of the 46ch it is held to beside a mark column.
+   The DOM order underneath is untouched — statement, prose, then status — so
+   the serial reader still hears the answer before the verdict. This is only a
+   re-placement of four grid items. */
+@media screen and (max-width: 720px) {
   main { --mark-w: 0; }
-  .rule { grid-template-columns: minmax(0, 1fr); column-gap: 0; }
-  .rule-h { display: block; }
-  .rule-id { display: block; margin-bottom: 3px; }
-  .rule-statement { max-width: none; display: block; font-size: 17px; }
-  .rule-body, .rule-trust, .warrant { grid-column: 1; }
+  .rule { grid-template-columns: max-content minmax(0, 1fr); column-gap: 12px; }
+  .rule-id { grid-row: 1; }
   .rule-trust {
-    grid-row: auto; order: -1; flex-direction: row; flex-wrap: wrap;
-    align-items: baseline; gap: 4px 9px; margin: 0 0 9px;
+    grid-column: 2; grid-row: 1; align-self: baseline;
+    flex-direction: row; flex-wrap: wrap;
+    align-items: baseline; gap: 2px 8px; margin: 0;
   }
+  .rule-statement {
+    grid-column: 1 / -1; grid-row: 2;
+    max-width: none; font-size: 17px; margin-top: 9px;
+  }
+  .rule-body { grid-column: 1 / -1; grid-row: 3; }
+  .warrant   { grid-column: 1 / -1; grid-row: 4; }
   .tier-caveat { border-left: 0; padding-left: 0; margin: 0; }
   .tier-caveat::before { content: '· '; color: var(--line-strong); }
-  .rule { display: flex; flex-direction: column; }
   h1 { font-size: 26px; max-width: none; }
-  .frame { padding: 0 18px; }
-  .top-in { padding: 0 18px; }
+  .frame, .top-in { padding: 0 18px; }
   .page-provenance dl { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .page-provenance > dl > div + div { margin-top: 8px; }
   .w-cites { grid-template-columns: minmax(0, 1fr); gap: 1px; }
   .w-cites dd { grid-column: 1; }
+
+  /* A two-column table IS a definition list that happened to be authored as a
+     table, and at this width it is two ribbons of wrapped words. Stack it:
+     first cell is the term, the rest carry their header as the label the
+     dropped <thead> was providing. Three columns and up keep scrolling — a
+     priority table is a matrix, and stacking one destroys the comparison. */
+  table[data-cols='2'], table[data-cols='2'] tbody,
+  table[data-cols='2'] tr, table[data-cols='2'] td { display: block; }
+  table[data-cols='2'] thead { display: none; }
+  table[data-cols='2'] tr {
+    padding: 10px 0; border-bottom: 1px solid var(--line-soft);
+  }
+  table[data-cols='2'] tr:last-child { border-bottom: 0; }
+  table[data-cols='2'] td { padding: 0; border: 0; }
+  table[data-cols='2'] td:first-child { color: var(--ink); font-weight: 600; }
+  table[data-cols='2'] td + td { margin-top: 3px; }
+  /* data-label is emitted only on cells after the first, so this never fires
+     on the term and never fires at all on a headerless table. */
+  table[data-cols='2'] td[data-label]::before {
+    content: attr(data-label); display: block;
+    font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--ink-4); margin-bottom: 1px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

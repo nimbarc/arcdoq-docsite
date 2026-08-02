@@ -35,10 +35,15 @@
   // Readers demonstrably leave a rule and come back: a rule is often qualified
   // by another one screens away, and cited again later. A two-second
   // flash is gone before a phone finishes painting.
+  // `id && getElementById(id)` yields '' on a hashless load, and '' is not
+  // nullish, so `?.` does NOT short-circuit: ''.classList is undefined and the
+  // whole IIFE dies here, taking search, the permalink copy, the rail spy and
+  // the key bar with it. Arriving on a deep link hid it, which is the one
+  // journey this design calls dominant. Ternary, not &&.
   const frame = () => {
     const id = decodeURIComponent(location.hash.slice(1))
     document.querySelectorAll('.rule.is-target').forEach((n) => n.classList.remove('is-target'))
-    const el = id && document.getElementById(id)
+    const el = id ? document.getElementById(id) : null
     if (el?.classList.contains('rule')) el.classList.add('is-target')
   }
   frame()
@@ -93,7 +98,10 @@
   }
 
   /* ── rail scroll-spy at rule granularity ───────────────────────────────── */
-  const chips = [...document.querySelectorAll('.chip')]
+  // Scoped to the sticky rail. The in-flow disclosure carries the same chips
+  // for the widths where the rail is hidden, and spying a collapsed list would
+  // only fight this one for aria-current.
+  const chips = [...document.querySelectorAll('.rail .chip')]
   if (chips.length && 'IntersectionObserver' in window) {
     const byId = new Map(chips.map((c) => [c.getAttribute('href').slice(1), c]))
     const seen = new Set()

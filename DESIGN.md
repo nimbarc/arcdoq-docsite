@@ -64,6 +64,30 @@ not a document, and the border breaks the reading measure of the one thing that
 needs it. Separation comes from space, the marching mark column, and the
 terminating warrant line.
 
+### The fold
+
+Below 720px the mark column has nowhere to be, so it folds into the heading: the
+ID and the verdict take row one together, the statement takes the full measure
+below them. They fold as a **pair**, because they are the same channel. The
+statement is not demoted by this — the law being protected is that nothing sits
+between the heading and the first sentence of the answer, and the ID and the
+verdict are heading furniture, not an interruption.
+
+**Rejected: the verdict on its own row above the ID.** This is what the first
+implementation actually did, against its own comment. Three rows where two will
+do, the least important line first, and a verdict floating above an ID it
+belongs beside — a status banner introducing a rule rather than a mark against
+one.
+
+### The ID is a sibling of the heading, not a child
+
+Two things fall out of it. The heading's accessible name becomes the statement
+alone, rather than `ORD-001, permalink An order cannot be placed…`. And the ID
+and the verdict become siblings, which is the only way they can share a row when
+the column folds without moving a status string inside an `<h3>` — which would
+put the verdict in the first thing a screen reader announces, the exact burial
+the DOM order below exists to prevent.
+
 ### DOM order is not visual order, deliberately
 
 The verdict sits in the margin beside the first line of prose, but **after** the
@@ -215,6 +239,13 @@ burn-down it is rather than as a second, larger section. It is never hidden: a
 search that returns nothing cannot tell a reader whether the behaviour is
 undocumented or whether they searched for the wrong word.
 
+**The area label is the link to that area's index**, and the count covers every
+page in the area including that index. A ledger row that names an area, counts
+it, and cannot be clicked to it leaves a published page named nowhere — and
+since the mobile collapse keeps the group holding the current page, and decides
+that by `aria-current`, arriving on a page the nav never names rendered an empty
+sidebar rather than a wrong one.
+
 **No coloured status dot per nav item.** A page's status is a rollup of a mix, so
 any single dot picks one and lies about the rest.
 
@@ -236,6 +267,26 @@ stays available behind a flag for corpora that genuinely are books.
 **Mobile is a route, not a modal.** Search is a real URL, so the back button
 works and a query is pasteable. There is no dialog, therefore no focus trap to
 get wrong and no JavaScript floor to fall through.
+
+**The rail has an in-flow twin below its breakpoint.** The sticky column cannot
+exist at phone widths, and hiding it left nothing behind: no way to reach a rule
+by the one key the reader arrived holding. The same chips, in the flow, closed,
+one control, no JavaScript. It is closed on arrival because the dominant journey
+lands mid-page on a deep link — the index is the second action, never the first.
+
+The two are never both on screen, so the duplicate chips are never both
+findable.
+
+**Rejected: letting the jump list stand in for it.** It carries only the
+unconfirmed rules, which is a warning, not an index, and it is already on screen
+on desktop where the rail is too.
+
+**This `<details>` is not a reversal of the one refused under the warrant.**
+That refusal rested on two facts, and neither holds here. The citations existed
+nowhere else on the page, so hiding them broke Ctrl-F for every cited test name;
+every chip here is a second copy of an ID that is still a heading in the
+document. And it was three focusable controls *per rule*; this is one for the
+page.
 
 ---
 
@@ -264,6 +315,21 @@ because rules qualify each other.
 **Links resolve against the source page's directory.** Never string-matched. A
 relative link from one area to another is a live link, and treating it as
 unpublished silently downgrades it to grey text.
+
+**A corpus link is recognised by its target, not by its prefix.** Only
+`./` and `../` were being matched, so `[…](rules/orders/lifecycle.md)` — the
+more natural way to write one, and the way this corpus's own README does — was
+left untouched and shipped as a live href to a `.md` file that no host serves.
+A link is a corpus link when it names a `.md` file or a directory, which is also
+what keeps the rewrite off the nav, whose hrefs are already `.html` by then,
+and off `#main`, the stylesheets and every absolute URL in the shell.
+
+**A page that cannot be produced is named, never dropped.** Two corpus paths can
+flatten to one output filename, and an ID can be declared twice; both used to
+resolve by silently keeping the last one. The URL scheme is not changing —
+every published address depends on it — so the clash is reported instead, and
+`--strict` makes it a failed build. A machine surface quietly missing a rule is
+the drift this corpus exists to prevent.
 
 **Source paths and test names are not hyperlinks.** The premise of this kind of
 corpus is that readers have no source access, so a link that 401s advertises a
@@ -345,6 +411,51 @@ separates upward and light downward and every component works in both unchanged.
 **One accent is the customer's.** Links, active nav, focus ring. The semantic
 colours are not: a reader learns that vocabulary once and reads it everywhere,
 and a machine-readable sidecar has to agree with what the page shows.
+
+---
+
+## On a phone
+
+The breakpoints were written before anything had been looked at, and three of
+the four things they were believed to do were not happening. What follows is
+what they do now.
+
+**A two-column table is a definition list that was authored as a table.** At
+390px it is otherwise two ribbons of wrapped words in a 108px and a 218px
+column. It stacks: the first cell is the term, the rest carry the header the
+dropped `<thead>` was providing. **Three columns and up keep scrolling** — a
+priority table is a matrix, and stacking one destroys the comparison that is the
+only reason it is a table.
+
+**Gutters match.** The 28px left offset is the desktop spine anchor and has to
+be undone at the collapse point, or it stacks on the padding and puts the
+content 46px from the left edge and 18px from the right. There is no spine to
+anchor to in a single column.
+
+**Targets are thumb-sized where a thumb is what is available.** The rail's chips
+are a pointer target in a 196px column; the in-flow twin's are the only way to
+reach a rule by ID on a phone, and are sized accordingly. Nothing tappable is
+under 24px.
+
+**A rule that hides needs a rule that unhides, at the same level of support.**
+The group collapse hides with plain CSS and unhides with `:has()`, so an engine
+that lacks `:has()` kept the first half and dropped the second: an empty sidebar
+on every page of the site. It sits behind `@supports` now. The fallback for a
+collapse is the whole thing, never nothing.
+
+**The layout is chosen by the screen, not by the paper.** A bare `max-width`
+query applies to paged media too, and the page box is about 698px on A4 and
+720px on Letter — either side of the fold. Printing one file on two paper sizes
+gave two different layouts. Every responsive block says `screen and`.
+
+**A good floor hides its own ceiling falling in.** Everything here works with
+JavaScript off — nav is baked, `:target` frames the rule, provenance is decorated
+in CSS — which is why nobody noticed that the client layer had been throwing on
+every load without a fragment, taking search, the permalink copy, the rail
+scroll-spy and the key bar with it. Arriving on a deep link was the only path
+that worked, and it is the path this design calls dominant, so it was the only
+path anyone walked. The floor is worth having and it is not evidence of
+anything above it.
 
 ---
 
