@@ -47,6 +47,13 @@ sees your repo.
 the action only builds, exactly as it did before — so bumping the tag can never
 start publishing something you did not ask it to.
 
+**Only your default branch publishes.** A docs repo usually runs
+`on: [push, pull_request]`, and a pull request from a branch in the same repo
+does receive secrets — so without this, opening a PR would put that branch's
+docs into production. Runs on any other ref say so and skip. Point it elsewhere
+with `publish-branch: release`, or pass `publish-branch: "*"` if you genuinely
+want every branch to publish.
+
 **The slug is the key.** Every run deploys to the site named by `site`, so
 nothing is stored between runs and no id is ever committed back into your repo.
 The first run creates the site; every run after updates it. Renaming that site
@@ -59,6 +66,7 @@ don't, or change `site` to match.
 | `site` | — | the site's slug on arcdoq. Required when publishing |
 | `site-name` | the slug | display name, used only when the site is first created |
 | `visibility` | `public` | `public` or `private`, honoured only on create |
+| `publish-branch` | your default branch | which branch may publish; `"*"` for every ref |
 
 `visibility` applies when the site is created and is then left alone: a routine
 CI run should not be able to flip a live site's exposure. Asking for one that
