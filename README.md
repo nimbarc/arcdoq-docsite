@@ -17,7 +17,7 @@ own:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nimbarc/arcdoq-docsite@v0.4.1
+- uses: nimbarc/arcdoq-docsite@v0.4.2
   with:
     corpus: .
 ```
@@ -31,7 +31,7 @@ Add a token and a slug, and the same step ships the site:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nimbarc/arcdoq-docsite@v0.4.1
+- uses: nimbarc/arcdoq-docsite@v0.4.2
   with:
     corpus: .
     site: docs
@@ -106,7 +106,7 @@ issue and cannot be recovered afterwards.
 ## Install
 
 ```bash
-npm i -D github:nimbarc/arcdoq-docsite#v0.4.1
+npm i -D github:nimbarc/arcdoq-docsite#v0.4.2
 ```
 
 A git dependency, versioned by tag. No registry and no auth needed. Publishing

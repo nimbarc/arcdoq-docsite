@@ -910,6 +910,80 @@ describe('the search route', () => {
   })
 })
 
+describe('citations that contain the note delimiter', () => {
+  const page = (meta) => ({
+    'docs.json': docsJson(['rules/x/index']),
+    'rules/x/index.md': `# X\n\n## G\n\n<a id="bb-001"></a>\n### BB-001 — A rule\n\n${meta}\n`,
+  })
+
+  test('an em dash inside a cited test name does not eat the citation', () => {
+    // Splitting on the first " — " blind left the rule with NO citations, so it
+    // rendered "No test" and earned "nothing tests this" — a false statement
+    // about the codebase, produced silently. 144 of one real corpus's test
+    // names contain one.
+    const r = adHoc(page('**Status:** implemented · **Test:** `r:regionPlane — every container is classified` · **Source:** `r:a.ts`'))
+    const rule = JSON.parse(r.read('rules.json')).rules[0]
+    assert.deepEqual(rule.tests, [{ repo: 'r', name: 'regionPlane — every container is classified' }])
+    assert.deepEqual(r.warnings, [])
+  })
+
+  test('a real prose note after the citations still parses', () => {
+    const r = adHoc(page('**Status:** implemented · **Source:** `r:a.ts` — the deduction happens at settlement'))
+    const html = r.read('rules-x-index.html')
+    assert.match(html, /the deduction happens at settlement/)
+    assert.deepEqual(JSON.parse(r.read('rules.json')).rules[0].sources, [{ repo: 'r', path: 'a.ts', member: null }])
+  })
+
+  test('an em dash in a citation AND a note both survive together', () => {
+    const r = adHoc(page('**Status:** implemented · **Test:** `r:does a — b thing` · **Source:** `r:a.ts` — a note'))
+    const rule = JSON.parse(r.read('rules.json')).rules[0]
+    assert.equal(rule.tests[0].name, 'does a — b thing')
+    assert.match(r.read('rules-x-index.html'), /a note/)
+  })
+
+  test('an unclosed backtick is named, not silently swallowed', () => {
+    const r = adHoc(page('**Status:** implemented · **Test:** `r:broken · **Source:** `r:b.ts`'))
+    assert.ok(r.warnings.some((w) => /BB-001 has an unclosed backtick in its \*\*Test:\*\* field/.test(w)),
+      `got ${JSON.stringify(r.warnings)}`)
+  })
+})
+
+describe('the rule address', () => {
+  const two = (a1, a2) => ({
+    'docs.json': docsJson(['rules/x/index']),
+    'rules/x/index.md': `# X\n\n## G\n\n${a1}### AA-001 — First\n\n**Status:** implemented · **Source:** \`r:a.ts\`\n\n${a2}### AA-002 — Second\n\n**Status:** implemented · **Source:** \`r:b.ts\`\n`,
+  })
+  const ANCHOR = (id) => `<a id="${id}"></a>\n`
+
+  test('an anchor below its heading becomes the NEXT rule\'s address, and says so', () => {
+    // The failure that motivated the warning: rule one silently slugifies and
+    // everything after it shifts by one, so every pasted link is wrong.
+    const r = adHoc({
+      'docs.json': docsJson(['rules/x/index']),
+      'rules/x/index.md': '# X\n\n## G\n\n### AA-001 — First\n\n<a id="aa-001"></a>\n\n**Status:** implemented · **Source:** `r:a.ts`\n\n### AA-002 — Second\n\n<a id="aa-002"></a>\n\n**Status:** implemented · **Source:** `r:b.ts`\n',
+    })
+    const rules = JSON.parse(r.read('rules.json')).rules
+    assert.equal(rules[1].anchor, 'aa-001', 'the shift is real')
+    assert.ok(r.warnings.some((w) => /AA-001 has no <a id> above its heading while others on this page do/.test(w)),
+      `got ${JSON.stringify(r.warnings)}`)
+  })
+
+  test('anchors above every heading are silent and correct', () => {
+    const r = adHoc(two(ANCHOR('aa-001'), ANCHOR('aa-002')))
+    const rules = JSON.parse(r.read('rules.json')).rules
+    assert.deepEqual(rules.map((x) => x.anchor), ['aa-001', 'aa-002'])
+    assert.deepEqual(r.warnings, [])
+  })
+
+  test('a page that declares no anchors anywhere has chosen the fallback', () => {
+    // Not every corpus hoists explicit anchors, and the slug fallback is
+    // deliberate. Warning on non-adoption would fail every such build under
+    // --strict, which is on by default.
+    const r = adHoc(two('', ''))
+    assert.deepEqual(r.warnings, [])
+  })
+})
+
 describe('the environment block', () => {
   const envOf = (r) => JSON.parse(read(r.out, 'rules.json')).environment
 

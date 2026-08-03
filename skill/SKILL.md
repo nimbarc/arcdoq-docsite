@@ -88,19 +88,30 @@ A rule is an `###` heading whose id matches `[A-Z][A-Z0-9]{1,9}-\d{1,4}`,
 followed by a statement, a body, and a meta line:
 
 ```markdown
-### EMAIL-001 — A globally suppressed address receives no mail of any kind
-
 <a id="email-001"></a>
+### EMAIL-001 — A globally suppressed address receives no mail of any kind
 
 The global denylist is checked first and blocks every email type, including
 transactional and account mail.
 
-**Status:** implemented · **Test:** `Evaluate_BlocksAllMail_WhenGloballySuppressed` · **Source:** `api:Business/Services/Email/SuppressionService.cs`
+**Status:** implemented · **Test:** `api:Evaluate_BlocksAllMail_WhenGloballySuppressed` · **Source:** `api:Business/Services/Email/SuppressionService.cs`
 ```
 
 **The explicit `<a id>` is the rule's address, and it is permanent.** A
 slugified title dies the moment someone rewords the heading, taking every
 pasted ticket link with it. Hoist it, never regenerate it, never renumber.
+
+**Placement is load-bearing: directly above the heading, no blank line between.**
+The lexer holds a pending anchor and the next rule heading claims it, so an
+anchor written *below* its heading becomes the **next** rule's address — every
+rule after it shifts by one, and the first silently falls back to a slugified
+title. The build now refuses this, but write it right the first time.
+
+Citations are repo-prefixed on both fields — `` `api:SomeTest` `` — and the
+prefix is what joins the rule to the repo state it was computed against.
+
+A citation may contain an em dash; it is read whole as long as it is inside
+backticks. What must never be unbalanced is the backticks themselves.
 
 `docs.json` is both the navigation and the publish filter — a page absent from
 it is not published. An area with no rules yet still belongs in the nav, in its
