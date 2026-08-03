@@ -17,7 +17,7 @@ own:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nimbarc/arcdoq-docsite@v0.3.0
+- uses: nimbarc/arcdoq-docsite@v0.4.0
   with:
     corpus: .
 ```
@@ -31,7 +31,7 @@ Add a token and a slug, and the same step ships the site:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nimbarc/arcdoq-docsite@v0.3.0
+- uses: nimbarc/arcdoq-docsite@v0.4.0
   with:
     corpus: .
     site: docs
@@ -106,7 +106,7 @@ issue and cannot be recovered afterwards.
 ## Install
 
 ```bash
-npm i -D github:nimbarc/arcdoq-docsite#v0.3.0
+npm i -D github:nimbarc/arcdoq-docsite#v0.4.0
 ```
 
 A git dependency, versioned by tag. No registry and no auth needed. Publishing
@@ -182,6 +182,20 @@ not the same answer to *can I rely on this?* Declare the file and the headings
 that separate them and the rendering respects the split. Declare nothing and the
 status renders unsplit, which is less detail rather than a wrong answer.
 
+**`docs.config.json` -> `refs`** names which branch plays which role. Every
+corpus that computes statuses has a ref that is live, one the docs are written
+from, and one earlier than both — but only the spellings vary, so the package
+keys on the roles and you supply the names:
+
+```json
+"refs": { "production": "origin/main", "candidate": "origin/stage", "development": "origin/dev" }
+```
+
+Declare `production` and a corpus can no longer say *matches production* about a
+comparison it ran against something else: an `environment` file whose `baseline`
+disagrees with it fails a `--strict` build. Declare nothing and nothing is
+checked, which is less detail rather than a wrong answer.
+
 **`docs.config.json` -> `environment`** is optional and matters to anyone whose
 statuses are computed from code living somewhere else. A status says *this
 matches production*; it never says *as of when*, so a reader has no way to tell a
@@ -217,6 +231,18 @@ fails the build rather than quietly yielding nothing.
 
 **`docs.css`** is optional, copied last so it wins the cascade. It is the way
 out for anyone going off road. Nothing about it is supported.
+
+## Authoring with an agent
+
+`skill/SKILL.md` ships in the package. It is the authoring discipline the
+conventions above assume: what may be asserted versus what must be computed,
+how to write a statement, and the questions to ask a new corpus before writing
+a single rule — starting with what your three branches are called, which
+nothing can guess.
+
+Point an agent at it at the tag you are pinned to. It is deliberately thin:
+principles and a pointer back to this README, not a copy of it. A skill that
+restates the package is a fork of the package that ages separately.
 
 ## Why a dependency and not a template
 

@@ -419,6 +419,15 @@ function readEnvironment() {
     })
   }
   if (!sources.length) return null
+  // A corpus declares which ref plays which ROLE, because only the spellings
+  // vary: `origin/main`, `origin/production` and `origin/release` are all the
+  // same role. If it has, the baseline the statuses were computed from has to be
+  // the ref the corpus calls production — otherwise the site says "matches
+  // production" about a comparison against something else.
+  const declared = config.refs?.production
+  if (declared && baseline && declared !== baseline) {
+    warn(`${rel} computed against "${baseline}" but refs.production is "${declared}"`)
+  }
   return { computedAt: raw.computedAt ?? null, baseline, sources }
 }
 const ENVIRONMENT = readEnvironment()
@@ -1075,7 +1084,10 @@ const htmlName = (rel) => rel.replace(/\//g, '-').replace(/\.md$/, '.html')
 /* ── run ─────────────────────────────────────────────────────────────────── */
 
 fs.mkdirSync(OUT, { recursive: true })
-const ctx = { computedAsOf: readGeneratedDate(CORPUS, config) }
+// The date the statuses were computed. `environment` states it as data, from the
+// run that computed it; the sidecar grep is the fallback for a corpus that has
+// not declared one yet, and reads a date out of human prose to get it.
+const ctx = { computedAsOf: ENVIRONMENT?.computedAt ?? readGeneratedDate(CORPUS, config) }
 const pages = config.publish.map(buildPage)
 
 // htmlName flattens the separator, so `a/b-c.md` and `a-b/c.md` are one file

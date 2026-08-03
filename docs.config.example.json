@@ -1,6 +1,12 @@
 {
   "accent": "#5B57E8",
 
+  "refs": {
+    "production": "origin/main",
+    "candidate": "origin/stage",
+    "development": "origin/dev"
+  },
+
   "areaLabels": {
     "user-mgmt": "Users and teams",
     "billing-v2": "Billing",
