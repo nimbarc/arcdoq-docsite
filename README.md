@@ -17,7 +17,7 @@ own:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nimbarc/arcdoq-docsite@v0.4.2
+- uses: nimbarc/arcdoq-docsite@v0.4.3
   with:
     corpus: .
 ```
@@ -31,7 +31,7 @@ Add a token and a slug, and the same step ships the site:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nimbarc/arcdoq-docsite@v0.4.2
+- uses: nimbarc/arcdoq-docsite@v0.4.3
   with:
     corpus: .
     site: docs
@@ -103,10 +103,22 @@ one workspace, and revocable; store one as a repository secret (the example
 above expects `ARCDOQ_DEPLOY_TOKEN`) and never in a file. It is shown once at
 issue and cannot be recovered afterwards.
 
+**`ARCDOQ_DEPLOY_TOKEN` is the only credential this package uses.** If your
+corpus *computes* its statuses, it needs a second one — a GitHub token with read
+access to the repository your rules cite — but that is between your workflow and
+GitHub, and nothing here reads it.
+
+Name it so it cannot be mistaken for an arcdoq credential: `SOURCE_REPO_TOKEN`,
+not `ARCDOQ_REPO_TOKEN`. A name one word away from the mandated one, sharing the
+`ARCDOQ_` prefix, turns `ARCDOQ_REPO_TOKEN is not set` into a line a reader
+correctly hears as *something is wrong with my arcdoq token* — and sends them
+looking for the fault in arcdoq rather than in an unset, optional, unrelated
+GitHub PAT. That has already happened once, within an hour of a first publish.
+
 ## Install
 
 ```bash
-npm i -D github:nimbarc/arcdoq-docsite#v0.4.2
+npm i -D github:nimbarc/arcdoq-docsite#v0.4.3
 ```
 
 A git dependency, versioned by tag. No registry and no auth needed. Publishing
