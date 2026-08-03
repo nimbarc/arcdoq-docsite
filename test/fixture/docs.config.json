@@ -1,5 +1,6 @@
 {
   "areaLabels": { "orders": "Orders", "inventory": "Stock levels" },
+  "environment": { "path": "meta/environment.json" },
   "statusSidecar": {
     "path": "meta/status.md",
     "appliesTo": "in-stage",

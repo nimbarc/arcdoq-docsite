@@ -163,6 +163,41 @@ Computed versus author-asserted is carried structurally, never by hue: a compute
 status renders with an as-of date, an asserted one with a visible reason instead.
 Two non-colour signals, no widgets.
 
+### The machine surface mirrors the page, from the run that produced it
+
+A status says *this matches production*. It never says *as of when*, and a reader
+who cannot date the answer cannot tell a current one from a stale one. That is
+the whole of what `environment` adds, and it is not a new fact: a corpus that
+computes statuses against source refs already renders the refs and commits it
+read, because a human reader needs the same date the machine one does. So the
+sidecar is the mirror of a page that already ships, and the field set is that
+page's columns.
+
+Mirroring is what makes it correct rather than merely present. The tool that
+computes the statuses writes the file in the same run, so the date beside a
+commit is the date that commit was read. `baseline` travels inside the file
+beside the `ahead` count it qualifies — a number is ahead *of* something, and
+splitting the two across a config file and a data file is how they come to
+disagree. A source that states one without the other keeps the commit and drops
+the count.
+
+**Rejected: reading whatever sync-state file the corpus already keeps.** It is
+the tempting version, because the file usually exists. It is also how you publish
+a different tool's clock under this one's name — a forward-sync cursor answers
+*when did we last pull*, not *when was this computed*, and the two differ by
+however long sits between those jobs. A freshness field that is quietly stale is
+worse than an absent one.
+
+**Rejected: the CI runner's clock, or the docs repo's own commit.** Both are free
+and neither answers the question. They date the *build*, and a build re-run today
+against a month-old sync would date itself today while stating month-old truths.
+
+**Rejected: passing the corpus's file through verbatim.** It keeps this package
+honest at the cost of moving the coupling into every reader, and it makes
+"agrees with what the page shows" undefinable — there is nothing to agree about
+if the shape is whatever one customer emitted. The package declares a shape; the
+corpus meets it. Anything the file invents beyond that shape is dropped.
+
 ---
 
 ## Provenance
