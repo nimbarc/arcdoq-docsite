@@ -981,6 +981,36 @@ describe('the environment block', () => {
     assert.equal(e.sources[0].commit, 'abc123')
   })
 
+  test('dates the machine surface from the run that computed it', () => {
+    // generatedAt used to be grepped out of a human-written sidecar, so a corpus
+    // that declared no sidecar dated its machine surface null. The environment
+    // block states the same date as data, from the tool that computed it.
+    const r = withEnv(ok({ computedAt: '2031-06-06' }))
+    assert.equal(JSON.parse(r.read('rules.json')).generatedAt, '2031-06-06')
+  })
+
+  test('refuses a baseline that disagrees with the declared production ref', () => {
+    // "Matches production" has to mean the ref the corpus calls production.
+    const r = adHoc({ ...corpus, 'meta/environment.json': ok() }, {
+      config: {
+        environment: { path: 'meta/environment.json' },
+        refs: { production: 'origin/main', candidate: 'origin/candidate' },
+      },
+    })
+    assert.ok(r.warnings.some((w) => /computed against "origin\/release" but refs\.production is "origin\/main"/.test(w)),
+      `got ${JSON.stringify(r.warnings)}`)
+  })
+
+  test('is silent when the declared production ref agrees', () => {
+    const r = adHoc({ ...corpus, 'meta/environment.json': ok() }, {
+      config: {
+        environment: { path: 'meta/environment.json' },
+        refs: { production: 'origin/release' },
+      },
+    })
+    assert.deepEqual(r.warnings, [])
+  })
+
   test('keys the file invents beyond the contract are not carried through', () => {
     const e = envOf(withEnv(ok({
       sources: [{ commit: 'abc123', dirty: false, lastProcessedSha: 'nope' }],
