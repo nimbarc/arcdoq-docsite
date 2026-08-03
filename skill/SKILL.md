@@ -47,8 +47,20 @@ in one go — not one at a time as you hit them.
    }
    ```
 
-   Never assume. A trunk-based shop may have only two, in which case say so and
-   do not invent a third.
+   **Never invent a role that does not exist.** Plenty of teams ship from `main`
+   alone. Declare only what is real:
+
+   ```json
+   "refs": { "production": "origin/main" }
+   ```
+
+   That is a complete answer, not a degraded one, and everything downstream
+   still works — it just says less, honestly. With one ref there is no
+   promotion to detect, so `in-stage` and `in-development` can never occur and
+   a status means only *do this rule's citations still resolve on production*.
+   That still catches the failure that matters most: a rule pointing at code or
+   a test that no longer exists. Do not offer to create a branch to fill the
+   shape, and do not leave a role declared but empty.
 
 2. **Which repos does this corpus document, and where are they checked out?**
    A rule cites source paths in *other* repositories. Without local clones
@@ -57,11 +69,14 @@ in one go — not one at a time as you hit them.
 3. **What prefix does a citation use for each repo?** `api:`, `dashboard:`,
    `web:`. This is what joins a rule to the repo state it was computed against.
 
-4. **How are the tests named?** Sample fifty of them. If names carry a subject,
-   a condition and an outcome (`Evaluate_BlocksAllMail_WhenGloballySuppressed`),
-   a test name can stand as a rule's warrant. If they are `test1`, `it works`,
-   or bare method names, **say so out loud** and fall back to citing source
-   paths only. Do not quietly produce weaker rules and present them as equal.
+4. **How are the tests named, and do they exist at all?** Sample fifty. You are
+   deciding one thing only: whether a name can carry meaning *without being
+   opened*. `Evaluate_BlocksAllMail_WhenGloballySuppressed` can;
+   `it('works')` cannot. Report the answer before writing anything.
+
+   That decision does not change what you must verify — see below — only how
+   much a reader gets from the citation alone. Say which case you are in
+   rather than producing weaker rules that look identical to stronger ones.
 
 5. **Who reads this, and can they see the source?** If the audience is testers
    and BAs without repo access, the corpus is internal and the site is private —
@@ -113,6 +128,50 @@ human verified something an agent read.
 
 **Never invented:** a rule with no source path is not a rule. If the code does
 not say it, do not write it, however reasonable it sounds.
+
+## What a test citation is worth
+
+Two things come apart, and conflating them is how a corpus starts lying.
+
+**Warrant** is whether the test actually proves the statement. **Legibility** is
+whether a reader can tell that from the name. A well-named test gives you both
+for free; a badly-named one gives you the first and none of the second.
+
+So the rule is the same either way: **open every test you cite, and read what it
+asserts.** Not all the tests in the repo — only the ones a rule points at, which
+is a handful per rule. A name is a claim about a body, and citing a name you
+have not read is repeating someone else's claim as your own.
+
+What changes with naming quality is only what the body is *for*. Where names are
+descriptive, the citation carries the explanation. Where they are not, the rule's
+body must state what the test establishes, because the name will tell the reader
+nothing when they arrive at it.
+
+Two traps worth naming:
+
+- **A test that asserts the opposite of the intent still documents the code.**
+  If the only test proves a behaviour the business considers a bug, the rule
+  describes what the code does and carries a caveat. It does not describe the
+  intention and cite a test that contradicts it.
+- **A passing test whose name overstates its scope.** `Handles_All_Cases` that
+  exercises one branch warrants one branch. Cite it, and let the rule's scope
+  match what the body covers, not what the name promises.
+
+## When there are no tests
+
+This is expected, and the model already carries it: an untested rule keeps
+whatever tier its code comparison earned and gains a caveat — *nothing tests
+this* — rendered on the page and present in `rules.json`. The warrant line says
+"No test" outright.
+
+So a rule with `Source:` and no `Test:` is a legitimate rule, not a draft. What
+you must not do is reach for a loosely-related test to fill the field. A wrong
+citation is worse than an absent one: the absent one is visibly absent, and the
+caveat says so.
+
+If a corpus has no test suite at all, say so once, up front, and expect every
+rule to carry that caveat. That is an honest corpus of source-read rules, and it
+is worth building — it just should not be described as verified.
 
 ## Writing a rule
 
