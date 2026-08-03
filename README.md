@@ -35,6 +35,7 @@ Add a token and a slug, and the same step ships the site:
   with:
     corpus: .
     site: docs
+    visibility: private
     arcdoq-token: ${{ secrets.ARCDOQ_DEPLOY_TOKEN }}
 ```
 
@@ -74,12 +75,20 @@ don't, or change `site` to match.
 | `arcdoq-token` | — | a deploy token, from a secret. Its presence enables publishing |
 | `site` | — | the site's slug on arcdoq. Required when publishing |
 | `site-name` | the slug | display name, used only when the site is first created |
-| `visibility` | `public` | `public` or `private`, honoured only on create |
+| `visibility` | none — **required on create** | `public` or `private`, honoured only on create |
 | `publish-branch` | your default branch | which branch may publish; `"*"` for every ref |
 
-`visibility` applies when the site is created and is then left alone: a routine
-CI run should not be able to flip a live site's exposure. Asking for one that
-disagrees with what is live is refused rather than ignored, so a job can never
+**`visibility` is required the first time, and has no default.** arcdoq refuses to
+choose: a deploy runs with nobody watching, and guessing wrong is either an outage
+(private when it should be public) or a leak (public when it should not be). For
+internal documentation — anything naming your source paths, test names, or what is
+live in production versus only on stage — `private` is almost certainly right. It
+is the example above for that reason.
+
+After the first deploy you can drop the line: a republish keeps whatever the site
+already is. `visibility` applies on create and is then left alone, because a
+routine CI run should not be able to flip a live site's exposure. Asking for one
+that disagrees with what is live is refused rather than ignored, so a job can never
 believe it made something private when it did not. Change it in the app.
 
 A published site is not always *reachable* the instant the step goes green. A
@@ -125,7 +134,7 @@ the check is green, so a warning that does not fail is a defect that ships.
 | `--site` | — | the site's slug on arcdoq (required) |
 | `--dir` | `dist` | the built directory to send |
 | `--name` | the slug | display name, used only on create |
-| `--visibility` | `public` | `public` or `private`, honoured only on create |
+| `--visibility` | none — **required on create** | `public` or `private`, honoured only on create |
 | `--repo` | `$GITHUB_REPOSITORY` | provenance recorded with the published version |
 | `--dry-run` | off | print exactly what would be sent, and send nothing |
 

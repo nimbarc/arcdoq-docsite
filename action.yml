@@ -66,8 +66,16 @@ inputs:
     default: ''
   visibility:
     description: >-
-      public or private, honoured only when the site is first created. Changing a
-      live site's visibility is refused — do that in the arcdoq app, deliberately.
+      `public` (anyone with the link) or `private` (only signed-in members of the
+      arcdoq workspace). REQUIRED THE FIRST TIME you deploy a site — arcdoq has no
+      default and refuses to guess, because a machine deploy has nobody watching
+      and the wrong guess is either an outage or a leak. Later deploys can omit it:
+      a republish keeps whatever the site already is.
+
+      For internal documentation, `private` is almost always what you want. It is
+      honoured only on CREATE — changing a live site's visibility from here is
+      refused, so a routine run can neither flip it nor silently disagree with it.
+      Change it in the arcdoq app, deliberately.
     required: false
     default: ''
   publish-branch:
