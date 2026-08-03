@@ -653,6 +653,75 @@ unknown-key warning is a repo-wide property of an intentionally open config
 schema, not a paging-specific gap.
 ---
 
+## 3. From the first real consumer corpus (2026-08-03)
+
+Found standing up `nimbarc/arcdoq-docs` — 71 rules over 21 pages, the first corpus
+built by anyone other than this repo's own fixture. Both v0.4.2 fixes are
+confirmed working against it and need no further attention: 9 citations
+containing an em dash now parse whole, and no anchor warning fires on a page that
+declares an `<a id>` for every rule. Recorded so neither gets re-litigated.
+
+#### `action.yml` targets Node 20, which GitHub now force-runs on Node 24
+
+`action.yml:30` (the `node-version` default), `action.yml:117` and
+`action.yml:145` · **cosmetic today, a hard break whenever the runners drop it**
+
+Every consumer build now ends with a yellow annotation:
+
+```
+Node.js 20 is deprecated. The following actions target Node.js 20 but are
+being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4,
+actions/upload-artifact@v4
+```
+
+Reproduced on a real run, not inferred: `nimbarc/arcdoq-docs`, run
+`30848403115`, 2026-08-03. The build and the publish both succeed, so this costs
+nothing yet — but the warning is on a green check, which is precisely where a
+warning goes unread until it becomes an error.
+
+Default `node-version` to `22`. The generator itself has no Node 20 dependency;
+`src/build.mjs` and `src/publish.mjs` use only stable built-ins, and the consumer
+corpus's own tooling already runs on 22 locally.
+
+**FIXED in v0.4.3** — `action.yml` now defaults to `'22'`. A consumer who pins
+`node-version` explicitly is unaffected; everyone else stops seeing the
+annotation on the next tag bump.
+
+#### The second credential a computing corpus needs has no name, and the obvious one collides
+
+`README.md`, publishing section · **documentation, and it misdirected a real user
+within an hour of first publish**
+
+The package names exactly one secret, `ARCDOQ_DEPLOY_TOKEN`. But any corpus that
+*computes* its statuses — which is the arrangement `skill/SKILL.md` describes as
+the whole point — resolves citations against a **different repository**, so in CI
+it needs a second credential: a GitHub token with read access to the source repo.
+The package says nothing about this, so the consumer invents a name.
+
+The obvious invention is `ARCDOQ_REPO_TOKEN`, and it is a trap. It differs from
+the mandated name by one word, shares the `ARCDOQ_` prefix, and appears in build
+output as `ARCDOQ_REPO_TOKEN is not set` — which a reader correctly parses as
+"something about my arcdoq token is wrong". Observed: the corpus author read that
+line, concluded the deploy token they had just minted was misconfigured, and went
+looking for the fault in arcdoq rather than in a missing, optional, unrelated
+GitHub PAT.
+
+Two lines in the README would prevent it: name the second credential's existence,
+and suggest a name that cannot be mistaken for an arcdoq one — `SOURCE_REPO_TOKEN`
+or `DOCS_SOURCE_TOKEN`. It is a GitHub credential, and nothing about it should
+read as arcdoq's.
+
+**FIXED in v0.4.3** — the README's token section now states that
+`ARCDOQ_DEPLOY_TOKEN` is the only credential the package uses, names the second
+one's existence, and says why `ARCDOQ_REPO_TOKEN` is the wrong name for it. Note
+what is NOT claimed: the package still reads no such token and takes no position
+on whether a corpus should grant source access in CI. That is a posture decision
+for the corpus — `arcdoq-docs` gates it behind a `secrets.* != ''` check, uses it
+only for a `--check` revalidation, and deletes the checkout before building,
+which is the shape to copy if you do grant it.
+
+---
+
 ## Notes for whoever picks this up
 
 **Where the work is.** Branch `mobile-verification-pass`, not yet merged or

@@ -6,7 +6,7 @@ author: arcdoq
 # the run step installs `github.action_ref`. One version, one line, and a
 # consumer needs no package.json, no lockfile and no dependency of their own.
 #
-#   - uses: nimbarc/arcdoq-docsite@v0.4.2
+#   - uses: nimbarc/arcdoq-docsite@v0.4.3
 #
 # Bumping the tag in the workflow is the whole upgrade path. That is the same
 # argument as the package itself: a fork freezes, a version moves.
@@ -28,9 +28,13 @@ inputs:
     required: false
     default: 'true'
   node-version:
+    # 22, not 20: GitHub force-runs Node 20 actions on 24 and annotates every
+    # consumer build with a deprecation warning. A warning printed on a green
+    # check is read by nobody until it becomes an error. The generator uses only
+    # stable built-ins, so there is nothing here that wants the older runtime.
     description: Node version to build with.
     required: false
-    default: '20'
+    default: '22'
   upload-artifact:
     description: Upload the built site as a workflow artifact.
     required: false
