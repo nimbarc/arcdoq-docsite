@@ -313,18 +313,33 @@ function coverageTag(md) {
 
 /* ── the rule metadata line ──────────────────────────────────────────────── */
 
-function parseMetaLine(md) {
+// The FIRST " — " that is not inside backticks. Scanning for it blind eats any
+// citation containing one — 144 of one real corpus's test names do — leaving the
+// rule with no citations at all, which then renders as "No test" and earns the
+// "nothing tests this" caveat. A silently understated warrant is the one failure
+// this whole corpus format exists to prevent, so it cannot be found by eye.
+function splitCitationsFromNote(rest) {
+  let inCode = false
+  for (let i = 0; i < rest.length; i++) {
+    if (rest[i] === '`') { inCode = !inCode; continue }
+    if (!inCode && rest.startsWith(' — ', i)) {
+      return { cites: rest.slice(0, i), note: rest.slice(i + 3).trim(), balanced: true }
+    }
+  }
+  // An odd number of backticks means the line cannot be read the way it looks.
+  return { cites: rest, note: null, balanced: !inCode }
+}
+
+function parseMetaLine(md, id) {
   const out = { status: null, tests: [], sources: [], sourceNote: null }
   for (const part of md.split(/\s+·\s+/)) {
     const f = /^\*\*(\w+):\*\*\s*([\s\S]*)$/.exec(part.trim())
     if (!f) continue
     const [, field, rest] = f
     if (field === 'Status') { out.status = rest.trim(); continue }
-    // rule-format.md: split on the FIRST " — ". Everything before it is
-    // repo-qualified paths; everything after is prose that may hold backticks.
-    const dash = rest.indexOf(' — ')
-    const cites = dash === -1 ? rest : rest.slice(0, dash)
-    if (dash !== -1) out.sourceNote = rest.slice(dash + 3).trim()
+    const { cites, note, balanced } = splitCitationsFromNote(rest)
+    if (!balanced) warn(`${id || 'a rule'} has an unclosed backtick in its **${field}:** field`)
+    if (note !== null) out.sourceNote = note
     for (const c of cites.matchAll(/`([^`]+)`/g)) {
       const [repo, ...tail] = c[1].split(':')
       const value = tail.join(':')
@@ -549,6 +564,7 @@ function buildPage(relPath) {
           if (pendingAnchor && pendingAnchor !== m[1].toLowerCase()) {
             warn(`anchor/ID mismatch on ${m[1]} (${pendingAnchor})`)
           }
+          rule.anchorDeclared = Boolean(pendingAnchor)
           pendingAnchor = null
           section.rules.push(rule)
           page.rules.push(rule)
@@ -564,7 +580,7 @@ function buildPage(relPath) {
 
     if (t.type === 'paragraph') {
       if (rule && !rule.meta && /^\*\*Status:\*\*/.test(t.text)) {
-        rule.meta = parseMetaLine(t.text)
+        rule.meta = parseMetaLine(t.text, rule.id)
         continue
       }
       const cov = coverageTag(t.text)
@@ -595,6 +611,15 @@ function buildPage(relPath) {
   }
 
   for (const r of page.rules) {
+    // A page that declares anchors for SOME rules and not others is not making a
+    // style choice, it is broken: the unanchored ones fall back to a slugified
+    // title that dies on the next reword. The usual cause is an <a id> written
+    // BELOW its heading, where it silently becomes the NEXT rule's anchor — so
+    // rule one slugifies and everything after it shifts by one. A page that
+    // declares none anywhere has chosen the fallback, and is left alone.
+    if (page.rules.some((x) => x.anchorDeclared) && !r.anchorDeclared) {
+      warn(`${r.id} has no <a id> above its heading while others on this page do — its address is a slugified title`)
+    }
     if (!r.meta) { r.meta = { status: null, tests: [], sources: [] }; warn(`${r.id} has no metadata line`) }
     r.status = r.meta.status
     r.vocab = config.status[r.status]

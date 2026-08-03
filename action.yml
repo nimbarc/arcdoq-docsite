@@ -6,7 +6,7 @@ author: arcdoq
 # the run step installs `github.action_ref`. One version, one line, and a
 # consumer needs no package.json, no lockfile and no dependency of their own.
 #
-#   - uses: nimbarc/arcdoq-docsite@v0.4.1
+#   - uses: nimbarc/arcdoq-docsite@v0.4.2
 #
 # Bumping the tag in the workflow is the whole upgrade path. That is the same
 # argument as the package itself: a fork freezes, a version moves.
