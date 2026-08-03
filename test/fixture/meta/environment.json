@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "computedAt": "2031-03-04",
+  "baseline": "origin/release",
+  "sources": [
+    {
+      "cite": "orders",
+      "name": "svc-orders",
+      "ref": "origin/candidate",
+      "commit": "3f9a1c7e55b0d2418ac6e0f7b91d3a4c6e28f015",
+      "ahead": 12,
+      "committedAt": "2031-03-02"
+    },
+    {
+      "cite": "stock",
+      "name": "svc-inventory",
+      "ref": "origin/candidate",
+      "commit": "b71e40d9a3c85f620e17d4b8cc9051f3ad6e2277",
+      "ahead": 3,
+      "committedAt": "2031-03-03"
+    }
+  ]
+}

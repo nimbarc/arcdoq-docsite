@@ -902,11 +902,91 @@ describe('the search route', () => {
   })
 
   test('rules.json is untouched by any of it', () => {
-    // The build-over-build diff's door: stable IDs, schema 1, caveat kinds an
+    // The build-over-build diff's door: stable IDs, schema 2, caveat kinds an
     // enum. The route reads the same data and adds nothing to the contract.
     const j = JSON.parse(read(r.out, 'rules.json'))
-    assert.deepEqual(Object.keys(j), ['schema', 'generatedAt', 'name', 'rules'])
-    assert.equal(j.schema, 1)
+    assert.deepEqual(Object.keys(j), ['schema', 'generatedAt', 'name', 'environment', 'rules'])
+    assert.equal(j.schema, 2)
+  })
+})
+
+describe('the environment block', () => {
+  const envOf = (r) => JSON.parse(read(r.out, 'rules.json')).environment
+
+  test('carries the corpus\'s declared file, and only its declared vocabulary', () => {
+    const e = envOf(run())
+    assert.equal(e.computedAt, '2031-03-04')
+    assert.equal(e.baseline, 'origin/release')
+    assert.equal(e.sources.length, 2)
+    assert.deepEqual(e.sources[0], {
+      cite: 'orders', name: 'svc-orders', ref: 'origin/candidate',
+      commit: '3f9a1c7e55b0d2418ac6e0f7b91d3a4c6e28f015', ahead: 12, committedAt: '2031-03-02',
+    })
+  })
+
+  test('is null, and silent, when the corpus declares nothing', () => {
+    // Less detail rather than a wrong answer: a corpus that computes no status
+    // against source refs has nothing to state, and saying so is not a warning.
+    const r = run({ config: {} })
+    assert.equal(envOf(r), null)
+    assert.deepEqual(r.warnings, [])
+  })
+
+  const corpus = {
+    'docs.json': docsJson(['rules/orders/index']),
+    'rules/orders/index.md': '# Orders\n\n## A rule\n\n<a id="ord-001"></a>\n\n**ORD-001.** A thing is true.\n\n**Status:** implemented · **Source:** `api:Svc/Thing.cs`\n',
+  }
+  const withEnv = (body) => adHoc(
+    { ...corpus, ...(body === null ? {} : { 'meta/environment.json': body }) },
+    { config: { environment: { path: 'meta/environment.json' } } })
+  const ok = (extra = {}) => JSON.stringify({
+    schema: 1, computedAt: '2031-01-01', baseline: 'origin/release',
+    sources: [{ cite: 'api', name: 'svc', ref: 'origin/candidate', commit: 'abc123', ahead: 4 }],
+    ...extra,
+  })
+
+  // Every one of these must be LOUD: --strict is on by default, so a declared
+  // surface that quietly yields null is the silent-failure class this repo has
+  // already been bitten by once.
+  const broken = [
+    ['a missing file', null, /environment declared but .* is missing/],
+    ['invalid JSON', '{ nope', /not valid JSON/],
+    ['the wrong file schema', ok({ schema: 2 }), /declares schema 2, expected 1/],
+    ['no sources array', ok({ sources: undefined }), /no "sources" array/],
+    ['a source with no commit', JSON.stringify({
+      schema: 1, baseline: 'origin/release', sources: [{ cite: 'api' }],
+    }), /a source with no commit/],
+    ['"ahead" as a string', ok({
+      sources: [{ commit: 'abc123', ahead: '4' }],
+    }), /"ahead" must be an integer/],
+    ['"ahead" with no baseline', JSON.stringify({
+      schema: 1, sources: [{ commit: 'abc123', ahead: 4 }],
+    }), /"ahead" needs a "baseline"/],
+  ]
+  for (const [what, body, warning] of broken) {
+    test(`warns on ${what}`, () => {
+      const r = withEnv(body)
+      assert.ok(r.warnings.some((w) => warning.test(w)),
+        `expected a warning matching ${warning}, got ${JSON.stringify(r.warnings)}`)
+    })
+  }
+
+  test('a number nobody can interpret is dropped, not published', () => {
+    // `ahead` without `baseline` is ahead of nothing. Keep the honest half.
+    const e = envOf(withEnv(JSON.stringify({
+      schema: 1, sources: [{ commit: 'abc123', ahead: 4 }],
+    })))
+    assert.equal(e.baseline, null)
+    assert.equal(e.sources[0].ahead, null)
+    assert.equal(e.sources[0].commit, 'abc123')
+  })
+
+  test('keys the file invents beyond the contract are not carried through', () => {
+    const e = envOf(withEnv(ok({
+      sources: [{ commit: 'abc123', dirty: false, lastProcessedSha: 'nope' }],
+    })))
+    assert.deepEqual(Object.keys(e.sources[0]),
+      ['cite', 'name', 'ref', 'commit', 'ahead', 'committedAt'])
   })
 })
 
@@ -916,5 +996,16 @@ describe('packaging', () => {
     const cfg = /const defaults = \{[\s\S]*?\n\}\n/.exec(src)[0]
     assert.match(cfg, /areaLabels: \{\}/, 'areaLabels must default empty')
     assert.ok(!/statusSidecar:\s*\{/.test(cfg), 'no sidecar path may be baked in')
+  })
+
+  test('learns no consumer\'s field names anywhere, not just in the defaults', () => {
+    // The defaults-only form of this guard let a reader through that parsed one
+    // customer's sync-state file by its own field names. A surface the template
+    // reads must be declared BY the template, so these names can only appear
+    // here if the template has started speaking someone else's vocabulary.
+    const src = fs.readFileSync(path.join(import.meta.dirname, '../src/build.mjs'), 'utf8')
+    for (const name of ['lastProcessedSha', 'aheadOfMain', 'lastRunAt', 'dirtyAtRead', 'orbitalx']) {
+      assert.ok(!src.includes(name), `src/build.mjs must not know the identifier "${name}"`)
+    }
   })
 })

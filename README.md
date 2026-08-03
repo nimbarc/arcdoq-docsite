@@ -17,7 +17,7 @@ own:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nimbarc/arcdoq-docsite@v0.2.0
+- uses: nimbarc/arcdoq-docsite@v0.3.0
   with:
     corpus: .
 ```
@@ -31,7 +31,7 @@ Add a token and a slug, and the same step ships the site:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nimbarc/arcdoq-docsite@v0.2.0
+- uses: nimbarc/arcdoq-docsite@v0.3.0
   with:
     corpus: .
     site: docs
@@ -106,7 +106,7 @@ issue and cannot be recovered afterwards.
 ## Install
 
 ```bash
-npm i -D github:nimbarc/arcdoq-docsite#v0.2.0
+npm i -D github:nimbarc/arcdoq-docsite#v0.3.0
 ```
 
 A git dependency, versioned by tag. No registry and no auth needed. Publishing
@@ -182,6 +182,39 @@ not the same answer to *can I rely on this?* Declare the file and the headings
 that separate them and the rendering respects the split. Declare nothing and the
 status renders unsplit, which is less detail rather than a wrong answer.
 
+**`docs.config.json` -> `environment`** is optional and matters to anyone whose
+statuses are computed from code living somewhere else. A status says *this
+matches production*; it never says *as of when*, so a reader has no way to tell a
+current answer from a stale one. Declare the file and `rules.json` carries the
+refs and commits the statuses were computed against. Declare nothing and the key
+is `null`, which is less detail rather than a wrong answer.
+
+The corpus writes that file; this package only carries it. Write it from the same
+tool, in the same run, that computes the statuses — a date taken from some
+neighbouring tool's clock is a different fact wearing this one's name.
+
+```json
+{
+  "schema": 1,
+  "computedAt": "2031-03-04",
+  "baseline": "origin/release",
+  "sources": [
+    { "cite": "orders", "name": "svc-orders", "ref": "origin/candidate",
+      "commit": "3f9a1c7e55b0d2418ac6e0f7b91d3a4c6e28f015",
+      "ahead": 12, "committedAt": "2031-03-02" }
+  ]
+}
+```
+
+`baseline` is what `ahead` is ahead *of*, and it travels beside the number rather
+than in config so the two cannot drift apart; a source stating `ahead` without a
+`baseline` keeps the commit and drops the number. `cite` is the prefix your rules
+use in `Source:` — supplying it is what lets a reader join a single rule to the
+repo state it was computed against. Only `commit` is required; a source without
+one is dropped and warned about. Everything is warned about: with `--strict` on
+by default, a declared file that is missing, unparseable, or the wrong `schema`
+fails the build rather than quietly yielding nothing.
+
 **`docs.css`** is optional, copied last so it wins the cascade. It is the way
 out for anyone going off road. Nothing about it is supported.
 
@@ -238,7 +271,8 @@ columns and scroll, because a matrix does not survive being stacked.
 dist/
   index.html          a copy of the first published page
   <page>.html         one per published page
-  rules.json          every rule with id, status, tier, caveats, tests, sources
+  rules.json          every rule with id, status, tier, caveats, tests, sources,
+                      and the code state it was all computed against
   tokens.css          the portable primitive ladder, light and dark
   viewer.css
   viewer.js
@@ -246,7 +280,12 @@ dist/
 
 `rules.json` is the machine surface. It is what lets an agent answer *which
 rules in this area are not confirmed against production* as a filter rather
-than a fuzzy text match.
+than a fuzzy text match, and — when the corpus declares an `environment` file —
+*and how stale is that answer*, which the statuses alone never say.
+
+The same values ride on the rendered page: each rule's `<article>` carries
+`data-rule-id`, `data-status`, `data-tier` and `data-origin`, so a reader that
+parses the HTML is never told less than one that parses the sidecar.
 
 ## Theming
 

@@ -30,5 +30,9 @@
         "caveat": "the test proving it is newer than production"
       }
     }
+  },
+
+  "environment": {
+    "path": "meta/environment.json"
   }
 }

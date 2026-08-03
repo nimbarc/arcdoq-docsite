@@ -374,6 +374,55 @@ function readBasisSidecar() {
 const BASIS = readBasisSidecar()
 const BASIS_VOCAB = config.statusSidecar?.groups || {}
 
+// The code state the corpus's statuses were computed against — what a reader
+// needs to answer *how stale is this?*, which a status alone never says.
+//
+// The corpus emits it, this only carries it: the tool that computes the statuses
+// writes the file in the same run, so the date beside a commit is the date that
+// commit was read, not some neighbouring tool's clock. Reaching into whatever
+// sync-state file a corpus happens to keep would take a different fact and
+// publish it under this one's name.
+//
+//   "environment": { "path": "meta/environment.json" }
+//
+//   { "schema": 1, "computedAt": "2026-08-02", "baseline": "origin/main",
+//     "sources": [ { "cite": "api", "name": "svc-api", "ref": "origin/stage",
+//                    "commit": "<sha>", "ahead": 25, "committedAt": "2026-07-31" } ] }
+//
+// `baseline` travels beside the number it describes: `ahead` is meaningless
+// without knowing what it is ahead OF, so a source stating one without the other
+// keeps the honest half and drops the claim.
+const ENVIRONMENT_SCHEMA = 1
+function readEnvironment() {
+  const rel = config.environment?.path
+  if (!rel) return null
+  const p = path.join(CORPUS, rel)
+  if (!fs.existsSync(p)) { warn(`environment declared but ${rel} is missing`); return null }
+  let raw
+  try { raw = JSON.parse(fs.readFileSync(p, 'utf8')) } catch { warn(`${rel} is not valid JSON`); return null }
+  if (raw?.schema !== ENVIRONMENT_SCHEMA) {
+    warn(`${rel} declares schema ${raw?.schema ?? 'nothing'}, expected ${ENVIRONMENT_SCHEMA}`); return null
+  }
+  if (!Array.isArray(raw.sources)) { warn(`${rel} has no "sources" array`); return null }
+  const baseline = typeof raw.baseline === 'string' ? raw.baseline : null
+  const sources = []
+  for (const s of raw.sources) {
+    // A source that cannot name the commit it was read at states nothing useful,
+    // and a half-stated source is worse than an absent one.
+    if (typeof s?.commit !== 'string' || !s.commit) { warn(`${rel} has a source with no commit`); continue }
+    const ahead = Number.isInteger(s.ahead) ? s.ahead : null
+    if (s.ahead !== undefined && ahead === null) warn(`${rel}: "ahead" must be an integer, got ${JSON.stringify(s.ahead)}`)
+    if (ahead !== null && !baseline) warn(`${rel}: "ahead" needs a "baseline" to be ahead of`)
+    sources.push({
+      cite: s.cite ?? null, name: s.name ?? null, ref: s.ref ?? null,
+      commit: s.commit, ahead: baseline ? ahead : null, committedAt: s.committedAt ?? null,
+    })
+  }
+  if (!sources.length) return null
+  return { computedAt: raw.computedAt ?? null, baseline, sources }
+}
+const ENVIRONMENT = readEnvironment()
+
 function caveatsFor(meta, status, id) {
   const c = []
   // The correction that makes the axis true rather than tidy: a rule can match
@@ -688,8 +737,13 @@ function renderRule(rule, ctx) {
   // the verdict become siblings, which is the only way they can share a row
   // when the mark column folds on a phone without putting a status string
   // inside an <h3>.
+  // `data-status` is the corpus's own computed value, carried through unchanged.
+  // The article's machine attributes are kept to the same field set rules.json
+  // publishes, so a reader that parses the HTML is never told less than a reader
+  // that parses the sidecar. `tier` alone cannot express "changed on stage" once
+  // `in-dev` or `unknown` appear — both fold onto `unconfirmed`/`computed`.
   return `<article class="rule" id="${rule.anchor}" data-rule-id="${rule.id}"
-         data-tier="${v.tier}" data-origin="${v.origin}">
+         data-status="${rule.status}" data-tier="${v.tier}" data-origin="${v.origin}">
   <a class="rule-id" href="#${rule.anchor}" data-copy="${rule.id}"
      aria-label="${esc(rule.id)}, permalink">${esc(rule.id)}</a>
   <h3 class="rule-statement">${inline(rule.statement)}</h3>
@@ -1147,8 +1201,12 @@ fs.writeFileSync(path.join(OUT, 'search.html'), shell({
 }))
 
 // rules.json — the machine surface the MCP queries.
+// `environment` answers "computed against WHAT, and WHEN" — without it a reader
+// is told a rule matches production but never how stale that answer is. Read
+// from the corpus's own sync state, so it stays computed rather than typed.
 fs.writeFileSync(path.join(OUT, 'rules.json'), JSON.stringify({
-  schema: 1, generatedAt: ctx.computedAsOf, name: config.name,
+  schema: 2, generatedAt: ctx.computedAsOf, name: config.name,
+  environment: ENVIRONMENT,
   rules: Object.values(ruleIndex).map((r) => ({
     id: r.id, statement: r.statement, page: r.page, anchor: r.anchor,
     status: r.status, tier: r.vocab.tier, origin: r.vocab.origin,
