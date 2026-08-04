@@ -270,9 +270,13 @@ navigation, in declared order, so the generator cannot disagree with the corpus
 about what the site contains.
 
 **A group of nothing but undocumented areas is set back**, so it reads as the
-burn-down it is rather than as a second, larger section. It is never hidden: a
-search that returns nothing cannot tell a reader whether the behaviour is
-undocumented or whether they searched for the wrong word.
+burn-down it is rather than as a second, larger section. The promise it carries
+is that a search returning nothing can only mean *undocumented*, never
+*published but unfindable*. On desktop that promise is the group itself, always
+rendered. Below 860px the collapse takes it along with every other group, and
+the promise is carried by the route instead, which indexes the stub pages like
+any other page. This said "it is never hidden", flatly, which is how it came to
+be false on a phone for a release without ever contradicting the page.
 
 **The area label is the link to that area's index**, and the count covers every
 page in the area including that index. A ledger row that names an area, counts
@@ -516,6 +520,32 @@ The group collapse hides with plain CSS and unhides with `:has()`, so an engine
 that lacks `:has()` kept the first half and dropped the second: an empty sidebar
 on every page of the site. It sits behind `@supports` now. The fallback for a
 collapse is the whole thing, never nothing.
+
+**A group that cannot move the reader is not rendered.** The collapse keeps the
+group holding the current page, which on a one-page group is a link to the page
+you are already on: the H1 restated a screen-inch above itself, which is the
+breadcrumb cut under Navigation, arrived at by a rule about `aria-current`
+rather than by a decision. Three of the first real corpus's 22 pages rendered
+it, and one of them was the hand-written guide — the page a phone reader is
+likeliest to arrive on from a pasted link.
+
+**The way out is a route, not a disclosure.** One ledger line at the foot of the
+nav, a name and a count, pointing at the index that already exists. Search being
+a route is what makes this enough: the reader who does not know what to search
+for still lands on a page listing every rule and every page as live links.
+
+**Rejected: a disclosure holding the other groups.** It is the obvious shape and
+it was queued as one. It is a second in-page copy of the nav and a second
+control meaning *index* on a page that already carries the in-flow rail, and at
+rest it does not even remove the self-link it was reached for: measured at 390px
+it added 40px of chrome and pushed the title further down the page than doing
+nothing at all.
+
+**Rejected: moving the nav below the content.** It buys the best number on the
+board — a rules page's title climbs from 597px down the page to 301px — and it
+buys it for nobody. The dominant journey is a deep link, which scrolls past the
+nav on arrival and never paid for its height; the reader it charges is the one
+who wants the ledger, now twenty rules below the fold.
 
 **The layout is chosen by the screen, not by the paper.** A bare `max-width`
 query applies to paged media too, and the page box is about 698px on A4 and

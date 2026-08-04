@@ -569,6 +569,28 @@ only the wordmark. Worth fixing — a disclosure that reveals the other groups i
 the obvious shape — but it is not the dead end this entry described, and it
 should not be queued as one.
 
+**FIXED, this commit — and the obvious shape was not the answer.** Measured
+across all 22 pages of `nimbarc/arcdoq-docs` first, because the entry describes
+one symptom of three. The collapse selects by adjacency, `which group am I in`,
+and that produced: 3 pages whose whole sidebar is a link to themselves, 14 stub
+pages carrying the fullest ledger on the site, and 5 rules pages where it works.
+The emptiest pages got the most navigation and the hand-written guide got none.
+
+Two changes, both in `DESIGN.md` now. A group is unhidden only when it can move
+the reader — a second `:has()` on the existing rule — so a group holding nothing
+but the current page is not rendered at all rather than restating the H1 above
+it. And one ledger line at the foot of the nav, `All pages · 22`, linking to the
+route. Measured at 390px on the guide page: 128px of nav with 0 ways out becomes
+87px with 1, and the title moves up 41px. A rules page pays 49px for it.
+
+The disclosure was built and rendered before it was rejected, which is the only
+reason this is stated with any confidence: at rest it does not remove the
+self-link it was reached for, so it *added* 40px of chrome and pushed the title
+further down than doing nothing. Opened, it buries the guide's title at 951px.
+Moving the nav below the content was rendered too and rejected in `DESIGN.md`
+for a reason worth keeping: it wins the numbers and charges the only reader who
+wants a ledger.
+
 #### --mark-w is the only rem length in an all-px stylesheet, so a raised browser font size steals the reading column instead of enlarging text
 
 `src/theme/viewer.css:638` · **medium**
@@ -616,6 +638,11 @@ as well; only the default-font-size preference triggers it. Fix is to give the
 token px values (184px / 160px) or clamp it, so the page is at least
 consistently unresponsive to the setting rather than actively penalising it.
 
+**FIXED, this commit.** 184px and 160px, the verifier's numbers. A test asserts
+that no rem length exists in either stylesheet, because the defect was never
+this token: it was one unit disagreeing with a whole file, and the next one
+would read as normal.
+
 #### The gap group DESIGN.md says is 'never hidden' is hidden on every mobile page except its own
 
 `src/theme/viewer.css:600` · **medium**
@@ -639,6 +666,15 @@ current='page']`.
 *Verifier’s correction:* The defect is real, and one detail is understated rather than overstated, but
 the claim's line citations are wrong and its framing implies the gap group is
 singled out when it is not.
+
+**CLOSED, this commit — by correcting the sentence, not the CSS.** The verifier
+is right that the gap group is not singled out: the collapse takes it like every
+other group, and after the search rebuild it is indexed like every other page,
+so the promise it carries — *a search returning nothing means undocumented, not
+unfindable* — is honoured at every width, just not by the same thing at each.
+`DESIGN.md` said "it is never hidden", flatly, and the flat version is what made
+this a defect rather than a description. It now names which surface carries the
+promise above and below the collapse point.
 
 #### The linear-paging flag DESIGN.md says stays available does not exist
 

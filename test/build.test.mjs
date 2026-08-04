@@ -381,6 +381,56 @@ describe('the phone', () => {
       'nothing hides a group outside the guard')
   })
 
+  test('a group that cannot move the reader is not unhidden', () => {
+    // The collapse keeps the group holding the current page. On a one-page
+    // group that is a link to the page you are already on — the H1 restated
+    // above itself, which is the breadcrumb this design cut. The second :has()
+    // is what makes the rule select for `can this move me` rather than for
+    // `am I in it`.
+    const css = fs.readFileSync(
+      path.join(import.meta.dirname, '../src/theme/viewer.css'), 'utf8')
+    assert.match(css,
+      /\.side \.nav-g:has\(a\[aria-current='page'\]\):has\(a:not\(\[aria-current\]\)\)/)
+    assert.ok(!/\.side \.nav-g:has\(a\[aria-current='page'\]\) \{/.test(css),
+      'the unqualified unhide is what rendered the self-link')
+  })
+
+  test('every page carries a way out of the collapse, and it is a route', () => {
+    // At most one group survives below 860px, so a reader who does not know
+    // what to search for needs somewhere to go. A link, not a disclosure: the
+    // route is already a browsable index of the whole corpus.
+    for (const p of r.pages) {
+      const html = read(r.out, p.path.replace(/\//g, '-').replace(/\.md$/, '.html'))
+      const nav = /<nav class="side"[\s\S]*?<\/nav>/.exec(html)[0]
+      assert.match(nav, /<a class="side-index" href="search\.html">All pages<span>7<\/span><\/a>/,
+        `${p.path} has no way out of the collapse`)
+      assert.ok(!nav.includes('<details'), 'the way out is a route, not a disclosure')
+    }
+  })
+
+  test('the way out is spent only where the ledger is off screen', () => {
+    const css = fs.readFileSync(
+      path.join(import.meta.dirname, '../src/theme/viewer.css'), 'utf8')
+    // Above the collapse point the whole ledger is on screen and the row would
+    // be a fourth control for something already visible; on the route itself
+    // every group is rendered and the row would point at its own page.
+    assert.match(css, /^\.side-index \{ display: none; \}$/m)
+    assert.match(css, /\[data-page='search'\] \.side-index \{ display: none; \}/)
+  })
+
+  test('nothing in the stylesheet moves when the default font size does', () => {
+    // `--mark-w` was the only rem length in a file whose every font-size is px.
+    // Raising Chrome's default font size widened the ID/verdict channel and
+    // took it out of the `minmax(0, 1fr)` prose track beside it: about 80px
+    // less prose, and not one larger character.
+    for (const f of ['viewer.css', 'tokens.css']) {
+      const css = fs.readFileSync(
+        path.join(import.meta.dirname, '../src/theme/', f), 'utf8')
+      assert.deepEqual([...css.matchAll(/[\d.]+rem\b/g)].map((m) => m[0]), [],
+        `${f} must be consistently px, not px with one rem in it`)
+    }
+  })
+
   test('the key bar cannot paint while it is hidden', () => {
     // `.keybar { display: flex }` outranks the UA `[hidden] { display: none }`,
     // so without this a 15px empty bar pins itself under the header on every
