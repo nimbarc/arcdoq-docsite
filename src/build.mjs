@@ -458,7 +458,7 @@ function caveatsFor(meta, status, id) {
   return c
 }
 
-function renderWarrant(meta) {
+function renderWarrant(meta, appearances) {
   const summary = []
   summary.push(meta.tests.length
     ? `${meta.tests.length} test${meta.tests.length > 1 ? 's' : ''}`
@@ -490,12 +490,29 @@ function renderWarrant(meta) {
       (s.member ? `<span class="member">#${esc(s.member)}</span>` : '') + `</code></dd>`
   }).join('')
 
+  // The narratives that contain this rule, last: the evidence comes first and
+  // this is navigation, not warrant. Guide before Flow, because the reader who
+  // needs this is holding an ID and wants to know what to do on a screen.
+  // Labelled by kind rather than with a new noun — the reader already meets
+  // Guide and Flow on the page warrant, and inventing a third word for the same
+  // thing is how one idea starts reading as two.
+  const byKind = {}
+  for (const a of appearances || []) (byKind[a.kind] ||= []).push(a)
+  const seenRows = ['Guide', 'Flow'].filter((k) => byKind[k]).map((k) =>
+    `<dt>${k}</dt>` + byKind[k].map((a) =>
+      `<dd><a class="cite" href="${htmlName(a.page)}">${esc(a.title)}</a>` +
+      (a.verified
+        ? `<span class="w-vfy">verified ${esc(a.verified)}</span>`
+        : `<span class="w-vfy" data-tone="pending">not human-verified</span>`) +
+      `</dd>`).join('')).join('')
+
   return `<div class="warrant" data-tests="${meta.tests.length}">
   <p class="w-line">${summary.join('<span aria-hidden="true"> · </span>')}</p>
   <dl class="w-cites">
     ${meta.tests.length ? `<dt>${meta.tests.length > 1 ? 'Tests' : 'Test'}</dt>${
       suite ? `<dd class="w-suite"><code class="cite">${esc(suite)}</code></dd>` : ''}${testRows}` : ''}
     <dt>Source</dt>${srcRows}
+    ${seenRows}
   </dl>
 </div>`
 }
@@ -790,7 +807,7 @@ function renderRule(rule, ctx) {
       ? `computed ${asOf ? `· ${asOf}` : ''}`
       : v.origin === 'asserted' ? 'stated by an author' : ''}</span>
   </p>
-  ${renderWarrant(rule.meta)}
+  ${renderWarrant(rule.meta, ctx.appearsIn?.[rule.id])}
 </article>`
 }
 
@@ -1146,6 +1163,50 @@ for (const p of pages) {
   }
 }
 
+// A flow or a guide links DOWN to the rules behind its steps, and nothing ran
+// the other way: a reader holding a rule ID could not discover that a
+// walkthrough for it existed. They had to already know the guide was there and
+// read it hunting for their ID. This derives the reverse from links the corpus
+// has already committed — it invents nothing, and a rule nothing narrates gains
+// nothing.
+//
+// It has to be its own pass. Link resolution runs per page at the END of the
+// render loop, after renderPage has already produced the rule's HTML.
+//
+// Each entry carries THE LINKING PAGE'S OWN verification state, which is the
+// whole reason this can be rendered honestly. A guide is `verified: never`
+// until a human walks it, and inside a walked guide each claim is separately
+// seen or only read — so a bare "walked in X" on the rule would launder exactly
+// the distinction the per-claim marker system exists to keep. What the rule says
+// is that a narrative exists and how far it has been checked. It never says the
+// rule itself was observed.
+const anchorToId = {}
+for (const r of Object.values(ruleIndex)) anchorToId[`${r.page}#${r.anchor}`] = r.id
+
+const RULE_LINK = /\]\(([^)\s#]*)#([\w-]+)\)/g
+const appearsIn = {}
+for (const p of pages) {
+  // A rules page pointing at a rule is a cross-reference between two claims,
+  // not a narrative that contains one. Only flows and guides narrate.
+  if (!/^(flows|guides)\//.test(p.relPath)) continue
+  const dir = path.posix.dirname(p.relPath)
+  const entry = {
+    page: p.relPath,
+    title: p.title || p.relPath,
+    kind: p.relPath.startsWith('flows/') ? 'Flow' : 'Guide',
+    verified: p.data.verified && p.data.verified !== 'never' ? p.data.verified : null,
+  }
+  for (const [, href, anchor] of
+       fs.readFileSync(path.join(CORPUS, p.relPath), 'utf8').matchAll(RULE_LINK)) {
+    const id = anchorToId[`${path.posix.normalize(path.posix.join(dir, href))}#${anchor}`]
+    if (!id) continue
+    const list = (appearsIn[id] ||= [])
+    // One guide naming a rule at five steps is one appearance, not five.
+    if (!list.some((e) => e.page === entry.page)) list.push(entry)
+  }
+}
+ctx.appearsIn = appearsIn
+
 for (const page of pages) {
   const { html } = renderPage(page, ctx)
   // Links must be RESOLVED against the source page's directory, never matched
@@ -1248,6 +1309,12 @@ fs.writeFileSync(path.join(OUT, 'rules.json'), JSON.stringify({
     id: r.id, statement: r.statement, page: r.page, anchor: r.anchor,
     status: r.status, tier: r.vocab.tier, origin: r.vocab.origin,
     caveats: r.caveats, tests: r.meta.tests, sources: r.meta.sources,
+    // Additive and always present, empty when nothing narrates the rule, so a
+    // schema 2 reader that ignores unknown keys is unaffected and one that wants
+    // "which rules have a walkthrough" can filter rather than guess. Each entry
+    // carries the narrative's own `verified` state for the same reason the page
+    // does: the machine surface must not imply more than the rendering does.
+    appearsIn: appearsIn[r.id] || [],
   })),
 }, null, 2))
 

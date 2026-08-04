@@ -23,13 +23,13 @@ describe('build', () => {
   before(() => { r = run() })
 
   test('publishes exactly what docs.json names, and nothing else', () => {
-    assert.equal(r.pages.length, 6)
+    assert.equal(r.pages.length, 7)
     const files = fs.readdirSync(r.out).filter((f) => f.endsWith('.html'))
-    // 6 pages + index.html + search.html. The search route is the generator's
+    // 7 pages + index.html + search.html. The search route is the generator's
     // own surface, not a page of the corpus: docs.json declares what the site
     // contains and does not name it, which is also why it carries no
     // aria-current and is exempt from the mobile group collapse.
-    assert.equal(files.length, 8)
+    assert.equal(files.length, 9)
     assert.ok(files.includes('index.html'))
     assert.ok(files.includes('search.html'))
   })
@@ -185,6 +185,127 @@ describe('provenance', () => {
   })
 })
 
+// Two code paths key on the `flows/` prefix — the page warrant's kind and the
+// search row's — and until this fixture existed the build could emit a Flow
+// page without a single test ever having built one. Guides were covered; the
+// other narrative genre was not.
+describe('page kinds', () => {
+  let r, flow
+  before(() => { r = run(); flow = read(r.out, 'flows-placing-an-order.html') })
+
+  test('a flow declares its kind, so a reader knows what they arrived in', () => {
+    assert.match(flow, /<div class="page-warrant"><span class="w-kind">Flow<\/span>/)
+  })
+
+  test('a flow carries no provenance strip, because nobody walked it', () => {
+    // The strip is gated on `walked-by-agent`. A flow is derived from rules,
+    // not from opening the product, so rendering one would invent a walk.
+    assert.ok(!flow.includes('page-provenance'))
+    assert.match(flow, /Verified 2031-03-04/)
+  })
+
+  test("a flow's `##` is the reader's own heading, not a rule-group label", () => {
+    assert.ok(flow.includes('<section class="prose-group"'))
+    assert.ok(!flow.includes('rule-group'), 'no rules, so no rule group')
+    assert.ok(!flow.includes('sec-range'), 'and no ID range beside the heading')
+  })
+
+  test('search separates the three genres rather than listing rules alone', () => {
+    const search = read(r.out, 'search.html')
+    for (const kind of ['Flow', 'Guide']) {
+      assert.match(search, new RegExp(`<span class="s-id">${kind}</span>`),
+        `${kind} pages are findable, not just rules`)
+    }
+    assert.match(search, /flows-placing-an-order\.html/)
+  })
+
+  test('a flow links down to its rules rather than restating them', () => {
+    // Every rule reference resolves to a published page: an inert span here
+    // would mean the flow names a rule the reader cannot reach.
+    assert.ok(!flow.includes('link-inert'))
+    assert.match(flow, /href="rules-orders-lifecycle\.html#ord-001"/)
+  })
+})
+
+// A flow or guide links down to its rules; until this, nothing ran the other
+// way, so a reader holding an ID could not find the walkthrough for it. The
+// whole risk is overclaiming — a guide is a draft until a human walks it — so
+// what is asserted here is as much about what the row does NOT say.
+describe('the narratives a rule appears in', () => {
+  let r, html, rule
+  before(() => {
+    r = run()
+    html = read(r.out, 'rules-orders-lifecycle.html')
+    rule = r.rules.find((x) => x.id === 'ORD-004')
+  })
+
+  test('a rule names the guide that walks it, and the flow that contains it', () => {
+    const warrant = /<article[^>]*data-rule-id="ORD-004"[\s\S]*?<\/article>/.exec(html)[0]
+    assert.match(warrant, /<dt>Guide<\/dt><dd><a class="cite" href="guides-refund-an-order\.html">/)
+    assert.match(warrant, /<dt>Flow<\/dt><dd><a class="cite" href="flows-placing-an-order\.html">/)
+    // Evidence first, navigation last: the test and the source that back the
+    // claim must precede the pages that merely mention it.
+    assert.ok(warrant.indexOf('<dt>Source</dt>') < warrant.indexOf('<dt>Guide</dt>'))
+  })
+
+  test("it carries the narrative's own state, so an unwalked guide cannot look walked", () => {
+    // This is the overclaim the feature exists to avoid. The guide is
+    // `verified: never`; the flow carries a date. Both must say which they are.
+    assert.ok(html.includes(
+      '<a class="cite" href="guides-refund-an-order.html">Refund an order</a>' +
+      '<span class="w-vfy" data-tone="pending">not human-verified</span>'))
+    assert.ok(html.includes(
+      '<a class="cite" href="flows-placing-an-order.html">An order is placed and settled</a>' +
+      '<span class="w-vfy">verified 2031-03-04</span>'))
+  })
+
+  test('rules.json says the same thing, so the sidecar cannot disagree', () => {
+    assert.deepEqual(rule.appearsIn.map((a) => [a.kind, a.verified]),
+      [['Flow', '2031-03-04'], ['Guide', null]])
+  })
+
+  test('a rule nothing narrates gains nothing at all', () => {
+    const r2 = adHoc({
+      'docs.json': docsJson(['rules/a']),
+      'rules/a.md': '---\narea: x\n---\n\n# A\n\n<a id="aaa-001"></a>\n' +
+        '### AAA-001 — A thing is true\n\n**Source:** `core:x.cs`\n',
+    })
+    assert.ok(!r2.read('rules-a.html').includes('w-vfy'))
+    assert.deepEqual(JSON.parse(r2.read('rules.json')).rules[0].appearsIn, [])
+  })
+
+  test('a rules page citing another rule is a cross-reference, not a narrative', () => {
+    // Rules point at each other constantly. Counting those would tell a reader
+    // a walkthrough exists when no one has written one.
+    const r2 = adHoc({
+      'docs.json': docsJson(['rules/a', 'rules/b']),
+      'rules/a.md': '---\narea: x\n---\n\n# A\n\n<a id="aaa-001"></a>\n' +
+        '### AAA-001 — A thing is true\n\n**Source:** `core:x.cs`\n',
+      'rules/b.md': '---\narea: x\n---\n\n# B\n\n<a id="bbb-001"></a>\n' +
+        '### BBB-001 — Another thing\n\n**Source:** `core:y.cs`\n\n' +
+        'Which is what [AAA-001](a.md#aaa-001) prevents.\n',
+    })
+    const byId = Object.fromEntries(
+      JSON.parse(r2.read('rules.json')).rules.map((x) => [x.id, x.appearsIn]))
+    assert.deepEqual(byId['AAA-001'], [])
+  })
+
+  test('one guide naming a rule at five steps is one appearance, not five', () => {
+    const r2 = adHoc({
+      'docs.json': JSON.stringify({ name: 'x', navigation: { groups: [
+        { group: 'Rules', pages: ['rules/a'] },
+        { group: 'Guides', pages: ['guides/g'] }] } }),
+      'rules/a.md': '---\narea: x\n---\n\n# A\n\n<a id="aaa-001"></a>\n' +
+        '### AAA-001 — A thing is true\n\n**Source:** `core:x.cs`\n',
+      'guides/g.md': '---\nverified: never\n---\n\n# G\n\n' +
+        'Step one. → [AAA-001](../rules/a.md#aaa-001)\n\n' +
+        'Step two. → [AAA-001](../rules/a.md#aaa-001)\n\n' +
+        'Step three. → [AAA-001](../rules/a.md#aaa-001)\n',
+    })
+    assert.equal(JSON.parse(r2.read('rules.json')).rules[0].appearsIn.length, 1)
+  })
+})
+
 describe('the phone', () => {
   let r, rules, guide
   before(() => {
@@ -298,7 +419,7 @@ describe('the client layer', () => {
   // reaching its own last line, which is the fact these tests were always
   // reaching for — the client layer threw on every hashless load for the life
   // of v0.1.0 and nothing said so, because everything it powers degrades quietly.
-  function load({ hash, page = null }) {
+  function load({ hash, page = null, selectors = {} }) {
     const appended = []
     const el = () => ({
       className: '', innerHTML: '', textContent: '', value: '', hidden: false,
@@ -316,7 +437,8 @@ describe('the client layer', () => {
         body: { appendChild: (n) => appended.push(n) },
         createElement: () => el(),
         getElementById: () => null,
-        querySelector: (s) => (s === '.search-page' ? page : null),
+        querySelector: (s) =>
+          s === '.search-page' ? page : Object.hasOwn(selectors, s) ? selectors[s] : null,
         querySelectorAll: () => [],
       },
       location: { hash, pathname: '/p.html', search: '', href: 'http://x/p.html', replace() {} },
@@ -335,6 +457,29 @@ describe('the client layer', () => {
   }
 
   const ran = (opts) => load(opts).root.dataset.viewer === 'ready'
+
+  test('the key bar reads the page\'s own strip, never a back-link\'s chip', () => {
+    // A rules page can now carry pending tone that is NOT about this page: the
+    // back-link renders each narrative's own `verified:` state, so `.w-vfy`
+    // chips describe OTHER pages' frontmatter. The key bar's lookup is scoped
+    // to `.page-provenance` for exactly that reason. Unscope it and a rules
+    // page nobody claimed anything about starts announcing "Human-verified
+    // never" — sourced from a guide it merely links to. Two verification
+    // surfaces, two frontmatter sources; only one of them is this page's.
+    const dt = { innerHTML: '<span>seen</span>' }
+    const keyEl = { children: [{ querySelector: () => dt }], querySelectorAll: () => [dt] }
+    const barEl = { innerHTML: '', hidden: false, setAttribute() {} }
+    load({ hash: '', selectors: {
+      '.ev-key': keyEl,
+      '.keybar': barEl,
+      // Present, so an UNSCOPED lookup would find it. Absent under the scoped
+      // key, which is what the shipped selector asks for.
+      '[data-tone="pending"]': { innerHTML: 'never' },
+    } })
+    assert.ok(barEl.innerHTML.includes('seen'), 'the key bar still renders the legend')
+    assert.ok(!barEl.innerHTML.includes('Human-verified'),
+      'a back-link chip must not be read as this page having gone unverified')
+  })
 
   test('it survives a load with no fragment, which is most loads', () => {
     // `id && getElementById(id)` is '' with no hash, '' is not nullish, so `?.`

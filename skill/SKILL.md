@@ -1,6 +1,6 @@
 ---
 name: arcdoq-docsite
-description: "Use when starting or maintaining a documentation corpus built with the arcdoq-docsite package — standing up a new docs repo from nothing, writing or revising rules that cite real source code and tests, wiring the status computation that dates those rules against a customer's branches, or upgrading a corpus to a new package tag. Covers the corpus conventions the generator parses (rule ids, Status/Test/Source meta lines, stable anchors, docs.json as nav and publish filter), what may be asserted versus what must be computed, and the questions to ask before writing a single rule."
+description: "Use when starting or maintaining a documentation corpus built with the arcdoq-docsite package — standing up a new docs repo from nothing, writing or revising rules that cite real source code and tests, writing the flows and UI walkthrough guides that sit alongside them, wiring the status computation that dates those rules against a customer's branches, or upgrading a corpus to a new package tag. Covers the corpus conventions the generator parses (rule ids, Status/Test/Source meta lines, stable anchors, the rules/ flows/ guides/ path prefixes, docs.json as nav and publish filter), what may be asserted versus what must be computed, how a guide is drafted from source and then walked in a browser, and the questions to ask before writing a single rule."
 license: "Apache 2.0."
 package: arcdoq-docsite
 requires: ">=0.4.0"
@@ -81,6 +81,11 @@ in one go — not one at a time as you hit them.
 5. **Who reads this, and can they see the source?** If the audience is testers
    and BAs without repo access, the corpus is internal and the site is private —
    it names source paths, test names and what is live where.
+
+6. **Is there a front end, and can you reach a running one?** A rule costs a
+   read; a guide costs somebody opening the product. Ask whether there is a UI
+   worth documenting, which deployed environment is safe to touch, and who grants
+   access — before promising a walkthrough you can only draft.
 
 ## The conventions the generator parses
 
@@ -198,8 +203,102 @@ A test name states what the code **does**, not what the business wants. If the
 only test asserts the opposite of the intended behaviour, the rule documents
 what the code does and carries a caveat — it does not document the intention.
 
-Draft new guides freely. **Never silently rewrite a guide someone has verified**
-— propose the change instead.
+## The other two kinds of page
+
+A corpus is not only rules. `flows/` and `guides/` are directory names the
+generator reads, and the split is not filing — the three have different subjects,
+different sources, and, the part that decides everything else, different clocks.
+
+| | Answers | Subject | Written from | Breaks when |
+|---|---|---|---|---|
+| `rules/` | does X work? | the system | tests and source | the cited code moves |
+| `flows/` | what happens when…? | the system | rules, in order | a rule beneath it changes |
+| `guides/` | how do I…? | a person | using the product | the UI changes |
+
+That last column is the whole reason guides are their own genre. **A guide breaks
+when the front end changes, which no diff of the code a rule cites will ever
+see.** So a guide cannot inherit a rule's computed status, and carries its own
+freshness signal instead.
+
+### Writing a flow
+
+An ordered narrative of what the system does across a whole journey, with the
+system as the subject. Numbered steps, each naming what triggers it and what
+state it leaves behind. Name it after the reader's goal, not the subsystem.
+
+**A flow never states a rule it could link to.** Link down for the conditional
+detail — *"a click from someone who already converted queues nothing
+([NUDGE-014])"* — rather than restating it. Restating is how the two drift apart.
+Close with what can go wrong: the branches and failures a tester actually hits,
+each pointing at the rule that explains it.
+
+### Writing a guide
+
+Outcome first — what the reader ends up with, and what they need before they
+start. Then numbered steps **naming the real UI labels**:
+
+> ✅ Press **Issue refund**. It stays disabled until the amount is valid.
+> ❌ Trigger the refund action once the form validates.
+
+A label is greppable and diffable, so a rename is findable; a paraphrase is
+neither. Link out for the why, and close with an "If it doesn't work" table
+pointing at the rules behind each failure.
+
+Prefer named labels to screenshots. Screenshots rot faster than anything else in
+a corpus, nothing tells you when they are stale, and they cannot be diffed in a
+pull request. Where one is genuinely unavoidable, say what it is a picture *of*,
+so the text still works when the image is wrong.
+
+**Draft from source, freely.** The front-end code carries the real click path —
+route, component, the literal label in the markup, what disables a control, where
+the user lands. Reading it beats anyone's memory of clicking through, and it is
+the intended way to write a first draft.
+
+What source cannot do is confirm the thing renders that way; conditional
+rendering on runtime state, flags and data is not statically evaluable. So a
+drafted guide lands `verified: never` and stays there until somebody walks it.
+**Never silently rewrite a guide someone has verified** — clear the date, note
+what changed, propose it, and leave the steps alone. A guide rewritten by
+something that never opened the product is a confident lie.
+
+### `verified:` means a human, and nothing else
+
+Three states, three fields, and merging them costs you the signal:
+
+```yaml
+verified: never                  # a PERSON walked these steps
+walked-by-agent: 2031-03-04      # an agent drove a browser against a deployment
+walked-in: staging — meridian-staging.example.com (v4.2.0), read-only
+```
+
+An agent walk confirms what actually renders, which is strictly more than reading
+source and still not a person having looked. Give it its own field: `verified:`
+is worth nothing the moment it means two things.
+
+Then mark **each claim** with the corpus's declared markers — seen versus read —
+rather than stamping the page once. A walk that leaves what it could not reach
+unmarked is worse than no walk, because it launders a source-drafted guess into
+an observation. End with a section naming what a human still has to check, in
+priority order.
+
+### Walking a screen
+
+Four rules, every one of them learned the hard way:
+
+1. **Say which environment and which build.** A guide walked on a candidate ref
+   may describe something production has never seen.
+2. **Read-only by default, and never in production.** Opening a form to read its
+   labels and cancelling out is always fine.
+3. **When you have to write, ask first.** You cannot walk a screen with no data
+   in it — an empty list hides the table, the row controls, and every state that
+   only exists once there is a row. Do it off production, use an obviously
+   disposable value on a documentation-reserved domain, remove it afterwards, and
+   say in the guide what was left behind. Removal is often deactivation; the row
+   survives.
+4. **Never record a negative from an empty screen.** The first real walk of a
+   guide concluded a screen's count badges did not exist, and marked the draft
+   wrong. One throwaway row brought them straight out. Absence of a control is
+   the one observation a blank list cannot support — mark it unseen instead.
 
 ## Loading context
 
