@@ -123,6 +123,37 @@ leaving only the distinguishing tail per citation.
 **Rejected: left-truncating source paths.** Truncating a citation is exactly as
 unusable as truncating a route. They wrap.
 
+### The warrant's last row is navigation, and stays per-rule
+
+A guide or flow linking down to a rule earns that rule a row naming it, last in
+the same `<dl>` that carries Test and Source. Last because the evidence backing
+the claim precedes the pages that merely mention it; getting it backwards would
+read as though a narrative were warrant.
+
+Each entry carries **the linking page's own `verified:` state**, never the
+rule's. A guide is `verified: never` until a human walks it, so a bare "walked
+in X" would launder exactly the distinction the per-claim marker system exists
+to keep. The row says a narrative exists and how far it has been checked. It
+never says the rule was observed.
+
+**Rejected: collapsing the repetition when one guide narrates many rules on a
+page.** Measured on the first real corpus — 9 of 20 rules carrying an identical
+row — the repetition costs 2.1% of page height on desktop and 2.7% at 390px,
+where it is the shortest row in the warrant. Against that, every collapse moves
+the fact off the rule the cold reader landed on and onto the page, which trades
+the dominant journey for the one this design de-prioritises. It is also an
+artifact of a corpus having exactly one guide: a second guide covering different
+rules makes the warrants distinct on its own. Source rows and hoisted suites
+already repeat identically down the same page and were never collapsed either.
+
+The axis that does not self-limit is the opposite one — many narratives on a
+single foundational rule, one row per guide, unbounded. Each entry costs 20.6px
+against a 169px claim, so the navigation block reaches the claim's own height at
+eight entries and passes it on the ninth. The answer there is a cap or a fold,
+never a collapse. Not built: no corpus is near it. `DEFECTS.md` §4 carries the
+measurements, including the reason a test-heavy rule's warrant already exceeds
+its claim before any of this applies.
+
 ### Anchors are hoisted, never generated
 
 If the corpus author wrote an explicit anchor above the heading, that becomes the

@@ -368,8 +368,13 @@ main h3 { font-size: 16.5px; font-weight: 600; letter-spacing: -0.014em; color: 
   grid-template-columns: max-content minmax(0, 1fr);
   gap: 2px 14px; font-size: 11.5px;
 }
+/* --ink-4 here measured 3.14:1 light / 3.73:1 dark at 10.5px — below AA, and
+   this label is load-bearing beyond legibility: GUIDE is the only thing binding
+   "not human-verified" to a guide rather than to the rule. An amber caveat
+   pinned to an illegible referent is exactly how a reader concludes the RULE
+   went unverified. --ink-3 clears AA in both themes (4.81 / 6.31). */
 .w-cites dt {
-  color: var(--ink-4); font-size: 10.5px; font-weight: 600;
+  color: var(--ink-3); font-size: 10.5px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.08em; padding-top: 1px;
 }
 .w-cites dd { margin: 0; grid-column: 2; display: flex; gap: 8px; align-items: baseline; min-width: 0; }
@@ -388,13 +393,31 @@ main h3 { font-size: 16.5px; font-weight: 600; letter-spacing: -0.014em; color: 
 .cite .base { color: var(--ink-2); }
 .cite .member { color: var(--ink-4); }
 .w-suite .cite { color: var(--ink-4); }
+/* The narrative link is NAVIGATION, not a citation. It carried `.cite`, which
+   put a guide title into the citation typeface — against this design's own rule
+   that monospace is permitted only on strings that paste into a tool, and that
+   nav is the prose face. A guide title pastes into nothing. Position bought
+   this row its distance from the warrant; the typeface was handing it back, and
+   worst at scale, where a stack of mono titles reads as more citations.
+   Prose face, but NOT the link accent: --accent measures 3.27:1 on the light
+   canvas, so every prose link on the site is already below AA, and the fix for
+   that is a brand decision about one token rather than nine new elements
+   inheriting a known failure. --ink-3 clears AA and keeps the underline, which
+   is what marks it interactive here. */
+.w-nar { color: var(--ink-3); overflow-wrap: anywhere; }
+
 /* A narrative's own verification state, beside the link to it. It is set quieter
    than the citation it qualifies EXCEPT when it is pending, which is the one
    case a reader must not skim past: an unwalked guide is a draft, and a rule
    that looks like it has a confirmed walkthrough when it does not is the exact
    overclaim this whole column exists to avoid. Same amber, same weight, as the
-   page-level strip — one idea, one treatment. */
-.w-vfy { flex: none; font-size: 10.5px; color: var(--ink-4); }
+   page-level strip — one idea, one treatment.
+   --ink-3, not --ink-4: the veto forbids rendering a rule MORE certain than it
+   is, and the settled state was the one failing AA (3.14:1) while the pending
+   one passed. A walked guide reading as the faintest thing in the block is the
+   veto running backwards. Pending stays louder on hue and weight, not on
+   contrast. */
+.w-vfy { flex: none; font-size: 10.5px; color: var(--ink-3); }
 .w-vfy[data-tone='pending'] { color: var(--amber); font-weight: 600; }
 
 /* ── provenance ──────────────────────────────────────────────────────────── */
@@ -797,6 +820,10 @@ table.no-head thead { display: none; }
   .page-provenance > dl > div + div { margin-top: 8px; }
   .w-cites { grid-template-columns: minmax(0, 1fr); gap: 1px; }
   .w-cites dd { grid-column: 1; }
+  /* The one tappable thing in the warrant measured 19px here, against this
+     document's own floor of 24. Padding, not line-height: line-height would
+     space the citation rows it shares a list with. */
+  .w-nar { display: inline-block; padding: 3px 0; }
 
   /* A two-column table IS a definition list that happened to be authored as a
      table, and at this width it is two ribbons of wrapped words. Stack it:

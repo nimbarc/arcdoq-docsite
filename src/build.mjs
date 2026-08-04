@@ -458,7 +458,7 @@ function caveatsFor(meta, status, id) {
   return c
 }
 
-function renderWarrant(meta, appearances) {
+function renderWarrant(meta, appearances, anchor) {
   const summary = []
   summary.push(meta.tests.length
     ? `${meta.tests.length} test${meta.tests.length > 1 ? 's' : ''}`
@@ -496,15 +496,27 @@ function renderWarrant(meta, appearances) {
   // Labelled by kind rather than with a new noun — the reader already meets
   // Guide and Flow on the page warrant, and inventing a third word for the same
   // thing is how one idea starts reading as two.
+  // The state is a SIBLING of the link, so a links-list or rotor — which reads
+  // accessible names and nothing else — would announce nine identical "Create a
+  // deploy token" and drop every caveat. That is the bare "walked in X" the
+  // standing veto exists to forbid, reached through the accessibility tree
+  // instead of through the page. `aria-describedby` puts the state back into
+  // what assistive tech announces without moving it visually or repeating it.
   const byKind = {}
   for (const a of appearances || []) (byKind[a.kind] ||= []).push(a)
+  let narN = 0
   const seenRows = ['Guide', 'Flow'].filter((k) => byKind[k]).map((k) =>
-    `<dt>${k}</dt>` + byKind[k].map((a) =>
-      `<dd><a class="cite" href="${htmlName(a.page)}">${esc(a.title)}</a>` +
-      (a.verified
-        ? `<span class="w-vfy">verified ${esc(a.verified)}</span>`
-        : `<span class="w-vfy" data-tone="pending">not human-verified</span>`) +
-      `</dd>`).join('')).join('')
+    // Pluralised for the same reason `Tests` is: one term labelling twelve
+    // definitions while its sibling row agrees in number reads as a bug.
+    `<dt>${byKind[k].length > 1 ? `${k}s` : k}</dt>` + byKind[k].map((a) => {
+      const id = `${anchor}-nar${++narN}`
+      return `<dd><a class="w-nar" href="${htmlName(a.page)}" ` +
+        `aria-describedby="${id}">${esc(a.title)}</a>` +
+        (a.verified
+          ? `<span class="w-vfy" id="${id}">verified ${esc(a.verified)}</span>`
+          : `<span class="w-vfy" id="${id}" data-tone="pending">not human-verified</span>`) +
+        `</dd>`
+    }).join('')).join('')
 
   return `<div class="warrant" data-tests="${meta.tests.length}">
   <p class="w-line">${summary.join('<span aria-hidden="true"> · </span>')}</p>
@@ -807,7 +819,7 @@ function renderRule(rule, ctx) {
       ? `computed ${asOf ? `· ${asOf}` : ''}`
       : v.origin === 'asserted' ? 'stated by an author' : ''}</span>
   </p>
-  ${renderWarrant(rule.meta, ctx.appearsIn?.[rule.id])}
+  ${renderWarrant(rule.meta, ctx.appearsIn?.[rule.id], rule.anchor)}
 </article>`
 }
 
