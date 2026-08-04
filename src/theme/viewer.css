@@ -372,6 +372,14 @@ main h3 { font-size: 16.5px; font-weight: 600; letter-spacing: -0.014em; color: 
 .cite .base { color: var(--ink-2); }
 .cite .member { color: var(--ink-4); }
 .w-suite .cite { color: var(--ink-4); }
+/* A narrative's own verification state, beside the link to it. It is set quieter
+   than the citation it qualifies EXCEPT when it is pending, which is the one
+   case a reader must not skim past: an unwalked guide is a draft, and a rule
+   that looks like it has a confirmed walkthrough when it does not is the exact
+   overclaim this whole column exists to avoid. Same amber, same weight, as the
+   page-level strip — one idea, one treatment. */
+.w-vfy { flex: none; font-size: 10.5px; color: var(--ink-4); }
+.w-vfy[data-tone='pending'] { color: var(--amber); font-weight: 600; }
 
 /* ── provenance ──────────────────────────────────────────────────────────── */
 

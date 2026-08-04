@@ -722,6 +722,158 @@ which is the shape to copy if you do grant it.
 
 ---
 
+## 4. The guide and flow genres (2026-08-03)
+
+Found while answering whether a corpus tells a reader how to *test* a rule — what
+to do on a screen to make a behaviour happen. It does, in one genre, and the
+package had no written idea that genre existed.
+
+#### The walkthrough genre renders fully and was documented nowhere
+
+`skill/SKILL.md`, `README.md` · **FIXED, this commit**
+
+The generator has carried guides and flows since v0.1.0: the kind label from the
+`guides/` / `flows/` path prefix (`src/build.mjs:869`), the `##`-as-content-
+heading treatment (`:883`), the provenance strip reading `verified`,
+`walked-by-agent` and `walked-in` (`:837`), the whole per-claim marker system in
+`config.evidence`, and both genres in the search index (`:923`). It was designed
+against real content — `src/theme/viewer.css:387` is tuned to an actual guide's
+mark distribution.
+
+None of it was documented. `skill/SKILL.md` said one line about guides ("Draft
+new guides freely"), `README.md` never mentioned `guides/` or `flows/` as
+directories at all, and the four frontmatter keys the renderer reads appeared in
+no documentation. Nor did the skill's own `description:` — which is what decides
+whether an agent loads it in the first place, so the feature was invisible from
+exactly the surface a new corpus is pointed at.
+
+That mattered because of where the discipline actually lived: `orbitalx-docs`, a
+corpus that predates the package and is being deleted. Its `guides/README.md` and
+`flows/README.md` carried the shape rules, the `verified:` versus
+`walked-by-agent:` split, and the walk discipline. Deleting it would have left a
+shipped feature with no specification anywhere but `build.mjs` and a fixture the
+README explicitly describes as invented.
+
+Now in `skill/SKILL.md` (the three genres and their differing drift clocks, flow
+and guide shape, `verified:` versus `walked-by-agent:`, the four rules for
+walking a screen) and `README.md` (the path-prefix contract, the four frontmatter
+keys, and a `docs.config.json -> evidence` entry saying what the marker
+vocabulary is *for*). No version bump: everything now documented shipped in
+v0.1.0, so `requires: ">=0.4.0"` still holds.
+
+#### `flows/` was rendered, and nothing in the fixture exercised it
+
+`test/fixture/` · **FIXED, this commit**
+
+Two code paths key on the `flows/` prefix — the page warrant's kind at
+`src/build.mjs:869` and the search row's at `:932` — and `test/fixture/` had no
+`flows/` directory at all. Guides were covered by `guides/refund-an-order.md`;
+flows were covered by nothing, so all 124 tests passed without the build ever
+producing a Flow page.
+
+The `##`-as-content-heading treatment reads like a third path and is not one: the
+comment at `:883` explains the intent, but the branch keys on whether a section
+holds rules, not on the path prefix, and the guide already exercises it.
+
+Closed with `test/fixture/flows/placing-an-order.md` and a `page kinds` block
+asserting that the kind renders `Flow`, that a flow carries no provenance strip
+because nobody walked it, that its `##` is a content heading with no rule-group
+and no ID range, that search separates the genres rather than listing rules
+alone, and that its rule references resolve rather than going inert. Tests
+124 -> 129. Each of the two prefix branches was removed in turn and confirmed to
+fail exactly the test covering it.
+
+#### Rule -> guide back-link: BUILT, with the three questions answered
+
+`src/build.mjs` · **BUILT, this commit — the reasoning is kept because the
+placement is provisional**
+
+A guide links down to the rules behind its steps — `→ [ORD-004](../rules/orders/
+lifecycle.md#ord-004)` in the fixture. Nothing runs the other way, so a reader
+holding a rule ID cannot discover that a walkthrough for it exists; they have to
+already know the guide is there and read it hunting for their ID.
+
+**The derivation is free and the plumbing is small.** `ruleIndex` is already
+built in a pass before any page renders (`:1138`), so a second pass collecting
+each page's `#anchor` targets that resolve into `rules/` gives an anchor ->
+[pages] map in about thirty lines. Note that link resolution itself runs
+per-page at the very end (`:1175`), after `renderPage` has produced HTML — which
+is why this has to be a pre-pass rather than a hook into the existing rewrite.
+
+Three things to settle first, and the second is why this is a ruling rather than
+a patch:
+
+1. **Where does it go in the rule atom?** DESIGN.md asks of every element whether
+   it is the claim or the warrant. A back-link is neither — it is navigation. The
+   atom is the most deliberately designed thing in the package, and giving it a
+   fourth part is a decision on its own.
+2. **It can render a rule more certain than it is, which is the standing veto.** A
+   guide is `verified: never` until a human walks it, and inside a walked guide
+   each individual claim is either seen or only read from source. A bare "Walked
+   in: Refund an order" on the rule launders both distinctions away at the far
+   end — precisely what the per-claim marker system exists to prevent. Doing it
+   honestly means carrying the linking claim's own marker state through, and
+   `provenance()` does not currently track which claim run a link sits in.
+3. **Does it belong in `rules.json` too?** That is the surface an agent queries,
+   and *which rules have a walkthrough* is a natural question to ask it. But the
+   field set is schema 2, and there is already an open decision above about
+   giving artifacts a build identity before the build-over-build diff. Add a
+   field here and settle that one in the same change.
+
+**How each was answered.**
+
+1. **Placement — inside the existing warrant `<dl>`, last.** Not a fourth part of
+   the atom. It is another row in the definition list that already carries Test
+   and Source, so it introduces no new visual language, and it sits *after* them:
+   the evidence that backs the claim precedes the pages that merely mention it. A
+   test asserts that ordering, because getting it backwards would read as though
+   a guide were warrant.
+2. **The overclaim is closed by carrying the narrative's own state.** Each entry
+   ships the linking page's `verified:`, rendered beside the link — a date, or
+   *not human-verified* in the same amber the page-level strip uses for pending.
+   The row therefore says *a narrative exists, and here is how far it has been
+   checked*. It never says the rule was observed. Mutation-tested: forcing every
+   entry to report as verified fails exactly the test that guards this.
+3. **`rules.json` carries it as `appearsIn`, and `schema` stays 2.** The field is
+   additive and always present — an empty array when nothing narrates the rule —
+   so a reader that ignores unknown keys is unaffected and one that wants *which
+   rules have a walkthrough* can filter rather than guess. This deliberately does
+   **not** settle the build-identity question above; that one is about ordering
+   two artifacts, which no additive field affects.
+
+Rows are labelled by kind (`Guide`, `Flow`) rather than with a new noun, because
+the reader already meets both words on the page warrant and a third word for the
+same idea reads as a second idea. Only flows and guides count: a rules page
+pointing at another rule is a cross-reference between two claims, not a narrative
+containing one, and counting those would tell a reader a walkthrough exists when
+nobody has written one. One narrative naming a rule at five steps is one
+appearance. Both are tested, and both mutation-tested.
+
+**A rules page now carries two verification surfaces, and only one is its own.**
+Raised from the arcdoq side while this was being built, checked, and locked. The
+`.page-provenance` strip describes *this* page, from *this* page's frontmatter.
+A `.w-vfy` chip describes a narrative that merely links here, from *that* page's
+frontmatter. `viewer.js:144` derives the sticky key bar's "Human-verified never"
+from the first, and its selector is scoped — `.page-provenance [data-tone=…]` —
+so the two cannot be confused today. Unscope it and a rules page nobody has
+claimed anything about starts announcing it went unverified, on the strength of
+a guide it happens to reference. There is now a client-layer test holding that
+scope, mutation-verified against exactly that edit.
+
+**Do not give `viewer.js` a fetch for this.** The live-overlay design that would
+justify one is a roadmap entry on the arcdoq side and is not built; the file's
+no-network property should not be spent ahead of it. Nothing in this change goes
+near it — `viewer.js` is byte-identical.
+
+**What is still provisional: the rendering at scale.** The fixture is 4 rules on
+one page. DESIGN.md's third question — does it survive a 20 KB page of 35 rules —
+is unanswerable until a real corpus has guides, and `arcdoq-docs` has none. If
+every rule on a long page carries the same two rows, the warrant may need the
+repetition collapsed. Look at it on the first real guide before deciding it is
+finished.
+
+---
+
 ## Notes for whoever picks this up
 
 **Where the work is.** Branch `mobile-verification-pass`, not yet merged or

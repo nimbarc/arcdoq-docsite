@@ -166,6 +166,31 @@ filter. A page absent from its nav is not published. Groups render in declared
 order, and a group whose pages hold no rules is set back so it reads as a gap
 rather than as a second, larger section.
 
+**`rules/`, `flows/` and `guides/` are load-bearing directory names.** A page's
+path prefix is what gives it its kind, and the kind changes how it renders: a
+`##` on a rules page groups rules and is set as a structural label, while the
+same heading on a flow or a guide is the reader's own and is set as one. The kind
+shows on the page and beside every search result. Nothing else about the layout
+is prescribed — depth, area folders and filenames are yours.
+
+Exactly four page-level frontmatter keys are read, and three of them exist for
+guides:
+
+| Key | |
+|---|---|
+| `area` | the corpus's own spelling of the area, matched loosely against `areaLabels` |
+| `verified` | the date a **person** walked the steps, or `never` |
+| `walked-by-agent` | the date an agent drove a browser against a deployed build |
+| `walked-in` | which environment, and which build, it was walked in |
+
+`walked-by-agent` is what turns the provenance strip on: it renders the human
+date — or `never`, toned as pending — the agent date, where it was walked, and
+how many claims the page makes with how many are still unobserved. `verified:`
+alone rides in the warrant line beside the kind. Declare neither and neither
+renders, which is less detail rather than a wrong answer. Anything else in the
+frontmatter is the corpus's own and is ignored here; a page's title comes from
+its `#` heading, never from a key.
+
 **`docs.config.json`** is optional. See `docs.config.example.json`. It carries
 the accent colour, the area label map, and the evidence marker vocabulary.
 Merging is shallow per top level key: overriding `areaLabels` supplies the whole
@@ -186,6 +211,30 @@ build. A key that names no area the corpus publishes is a typo or a directory
 that was renamed. A page whose `area:` matches no key while its own directory
 does is a site that names one area two ways — the declared label in the nav, the
 raw string on the page — which is the thing the map exists to prevent.
+
+**`docs.config.json` -> `evidence`** declares the per-claim marker vocabulary,
+and it exists for guides. A walked page cannot honestly be stamped once at the
+top: some of it was seen rendering and some was only read from source, and the
+reader needs to know which sentence is which. Declare the tokens and each becomes
+a designed glyph in place, the claim it closes is marked and counted, and a
+legend table on the page renders as a key rather than as a table.
+
+```json
+"evidence": {
+  "coverageWords": ["all", "both", "each", "every"],
+  "markers": [
+    { "token": "✅", "id": "seen", "short": "seen",
+      "label": "seen rendering in the browser", "glyph": "solid" },
+    { "token": "📄", "id": "from-source", "short": "from source",
+      "label": "read from source, silent about what renders", "glyph": "dashed" }
+  ]
+}
+```
+
+A token is an arbitrary string, so `(v)`, `[src]` and `†` work as well as an
+emoji. `coverageWords` is what keeps a summary line — *"All 📄."*, *"The rest are
+📄."* — from counting as a claim of its own and inflating the tally: a run built
+only from those words takes the glyph without opening a claim.
 
 **`docs.config.json` -> `statusSidecar`** is optional and worth knowing about.
 Some corpora compute a status token that carries more than one fact: the same
@@ -248,9 +297,10 @@ out for anyone going off road. Nothing about it is supported.
 
 `skill/SKILL.md` ships in the package. It is the authoring discipline the
 conventions above assume: what may be asserted versus what must be computed,
-how to write a statement, and the questions to ask a new corpus before writing
-a single rule — starting with what your three branches are called, which
-nothing can guess.
+how to write a statement, how a guide is drafted from front-end source and then
+walked in a browser without laundering a guess into an observation, and the
+questions to ask a new corpus before writing a single rule — starting with what
+your three branches are called, which nothing can guess.
 
 Point an agent at it at the tag you are pinned to. It is deliberately thin:
 principles and a pointer back to this README, not a copy of it. A skill that
@@ -310,7 +360,8 @@ dist/
   index.html          a copy of the first published page
   <page>.html         one per published page
   rules.json          every rule with id, status, tier, caveats, tests, sources,
-                      and the code state it was all computed against
+                      the flows and guides that narrate it, and the code state
+                      it was all computed against
   tokens.css          the portable primitive ladder, light and dark
   viewer.css
   viewer.js
@@ -320,6 +371,13 @@ dist/
 rules in this area are not confirmed against production* as a filter rather
 than a fuzzy text match, and — when the corpus declares an `environment` file —
 *and how stale is that answer*, which the statuses alone never say.
+
+`appearsIn` answers the reader's other question, the one a status cannot: *is
+there a walkthrough for this, and has anyone actually walked it?* A flow or guide
+links down to the rules behind its steps; that link is read back so a rule names
+the narratives that contain it, each carrying its own `verified:` state. Empty
+when nothing narrates the rule. It says a narrative exists and how far it has
+been checked — never that the rule itself was observed.
 
 The same values ride on the rendered page: each rule's `<article>` carries
 `data-rule-id`, `data-status`, `data-tier` and `data-origin`, so a reader that
