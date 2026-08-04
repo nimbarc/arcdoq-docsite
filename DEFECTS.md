@@ -1,7 +1,7 @@
 # Known defects
 
-Three open items, plus two raised by the design pass on 2026-08-04. Two of the
-three only bind when someone starts the build-over-build diff.
+Three open items. Two of them only bind when someone starts the build-over-build
+diff, so one thing is actually outstanding.
 
 Everything that closed has been **deleted rather than archived**. The reasoning
 that outlived each fix lives in `DESIGN.md` — read that first; it carries the
@@ -97,49 +97,31 @@ asked for it.
 
 ---
 
-## Raised by the 2026-08-04 design pass
+## Decided and implemented, 2026-08-04
 
-Both are contrast findings that outgrew the surface being reviewed. Neither is a
-regression; both are original to the theme.
+Both were contrast failures that outgrew the surface being reviewed, and both
+are now fixed in `tokens.css`. Kept as a short record because the *shape* of
+each answer is the reusable part.
 
-#### `--accent` fails WCAG AA on the light canvas, so every prose link on the site does
+**`--accent` was 3.27:1 as text on the light canvas**, so every prose link on
+the site was below AA. Fixed by splitting rather than darkening: `--accent`
+stays exactly as it was and keeps serving rings, fills and borders, which owe
+3:1 and met it. A new `--accent-text` is **derived** from it
+(`color-mix(in oklch, var(--accent) 72%, var(--ink))`, 5.18:1) and is what links
+use. Derived so a customer overriding `--accent` — the one token they override —
+carries the correction with them. No mix can guarantee AA for an arbitrary
+override; this makes the common case right instead of wrong.
 
-`src/theme/tokens.css:49` · **decide: it is the one token a customer overrides**
+**The ink ladder was tuned against the canvas, and the design puts dim text on
+`--surface-1`.** Every code citation sits on a `--surface-1` fill, where the old
+`--ink-4` measured 3.14:1 and even a canvas-correct 4.54:1 still failed at 4.2.
+Re-tuned against `--surface-1`, the tighter of the two backgrounds, so all four
+rungs clear AA on both: 16.16/14.96, 11.03/10.21, 7.35/6.81, 5.03/4.66. Two
+`opacity` multipliers went with it (`.cite .dir` at .75, `.tier-origin` at .8) —
+they were dividing an already-failing rung.
 
-Measured in-browser against the light canvas: `--accent`
-(`oklch(0.520 0.190 293)`) resolves to **3.27:1**. AA needs 4.5:1 for text at
-15px. Dark is fine at 8.54:1. Every `<a>` in rule prose inherits this, so the
-failure is site-wide rather than local to any component.
-
-This is why the narrative back-link was deliberately **not** given the link
-accent when it moved to the prose face — nine new elements should not inherit a
-known failure while the token itself is unresolved.
-
-It is a decision rather than a patch because `--accent` is documented as the one
-value a customer overrides, so darkening it is a brand call and any fix has to
-survive customers substituting their own. A per-context override (accent for
-large text and UI, a darker variant for inline links) is the other shape.
-
-#### `--ink-4` is below AA by construction and cannot be darkened without merging into `--ink-3`
-
-`src/theme/tokens.css:36` · **decide: it is a ladder shape, not a value**
-
-`--ink-4` measures **3.14:1 light / 3.73:1 dark**, used at 10–11.5px, where AA
-needs 4.5:1. Reaching AA on the light canvas requires L ≤ 0.56; `--ink-3` is
-already at 0.545. **The bottom rung of the ink ladder cannot pass AA and stay a
-distinct rung.** A deterministic scan of one built page returned 73 low-contrast
-hits, effectively all of them this token.
-
-The design pass moved the two uses where the failure was load-bearing —
-`.w-cites dt` and `.w-vfy`, both now `--ink-3`. Still on `--ink-4`: `.repo`,
-`.cite .dir`, `.w-line`, and the rail. Each has an argument for staying dim
-(`.cite .dir` is deliberately subordinate to the basename; `.w-line` restates
-the rows below it), and that argument is exactly what needs deciding: either
-`--ink-4` is a decorative rung that must never carry text a reader needs, and
-its uses get audited against that rule, or the ladder drops to three rungs and
-is re-tuned.
-
----
+The lesson worth keeping: **a ladder tuned against the canvas is not tuned.**
+Check the darkest background the token actually lands on.
 
 ## Notes for whoever picks this up
 

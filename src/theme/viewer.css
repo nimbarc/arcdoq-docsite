@@ -28,7 +28,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-a { color: var(--accent); text-decoration-color: color-mix(in oklch, currentColor 35%, transparent); text-underline-offset: 2px; }
+a { color: var(--accent-text); text-decoration-color: color-mix(in oklch, currentColor 35%, transparent); text-underline-offset: 2px; }
 a:hover { text-decoration-color: currentColor; }
 
 :focus-visible {
@@ -303,7 +303,10 @@ main h3 { font-size: 16.5px; font-weight: 600; letter-spacing: -0.014em; color: 
   font-variant-numeric: tabular-nums;
   display: inline-block; padding: 2px 0;
 }
-.rule:hover .rule-id, .rule-id:focus-visible { color: var(--accent); }
+/* --accent-text, not --accent: the resting state is --ink-3, so using the raw
+   accent here made contrast DROP on hover and on keyboard focus, which is the
+   one moment it must not. */
+.rule:hover .rule-id, .rule-id:focus-visible { color: var(--accent-text); }
 .rule-statement {
   grid-column: 2; grid-row: 1; align-self: baseline;
   margin: 0 0 9px;
@@ -348,7 +351,7 @@ main h3 { font-size: 16.5px; font-weight: 600; letter-spacing: -0.014em; color: 
   padding-left: 8px; border-left: 1px solid var(--line);
   margin: 2px 0 1px;
 }
-.tier-origin { color: var(--ink-4); opacity: .8; font-size: 11px; }
+.tier-origin { color: var(--ink-4); font-size: 11px; }
 
 /* ── the warrant: open, always, below the prose ──────────────────────────── */
 
@@ -389,7 +392,12 @@ main h3 { font-size: 16.5px; font-weight: 600; letter-spacing: -0.014em; color: 
   font-size: 11.5px; color: var(--ink-3); overflow-wrap: anywhere;
   letter-spacing: -0.01em;
 }
-.cite .dir { color: var(--ink-4); opacity: .75; }
+/* No opacity. It multiplied the bottom rung down to 2.87:1, and a path's
+   directory is not decoration — this design refuses to left-truncate a citation
+   on the grounds that a truncated one is unusable, and rendering it below the
+   legibility floor truncates it for exactly the reader who can least afford it.
+   The step to --ink-2 on the basename still carries the emphasis. */
+.cite .dir { color: var(--ink-4); }
 .cite .base { color: var(--ink-2); }
 .cite .member { color: var(--ink-4); }
 .w-suite .cite { color: var(--ink-4); }

@@ -29,11 +29,25 @@
   --line:          oklch(0.882 0.008 285);
   --line-strong:   oklch(0.800 0.013 285);
 
-  /* Ink */
+  /* Ink. Four rungs, and every one of them carries text somewhere, so every one
+     has to clear WCAG AA (4.5:1) against the canvas — this ladder is used at
+     10-11.5px, which is never "large text".
+     The old bottom rung could not. --ink-4 sat at L 0.650 for 3.14:1, and
+     reaching 4.5:1 needs L <= 0.560 — past where --ink-3 already was at 0.545.
+     So it was not a value to nudge: a fourth rung below --ink-3 could not exist
+     and pass. Fixed by compressing the middle instead of deleting the rung, so
+     the ladder keeps four steps and gains roughly even spacing (0.125 / 0.10 /
+     0.10, against 0.165 / 0.145 / 0.105 before). --ink itself is untouched.
+     Tuned against --surface-1, NOT the canvas, because that is the tighter of
+     the two and the design puts dim text on it — every code citation sits on a
+     --surface-1 fill. A canvas-tuned ladder passes on paper and still fails in
+     the warrant. Measured, canvas / surface-1:
+       --ink    16.16 / 14.96      --ink-3   7.35 / 6.81
+       --ink-2  11.03 / 10.21      --ink-4   5.03 / 4.66  */
   --ink:           oklch(0.235 0.020 285);
-  --ink-2:         oklch(0.400 0.018 285);
-  --ink-3:         oklch(0.545 0.016 285);
-  --ink-4:         oklch(0.650 0.014 285);
+  --ink-2:         oklch(0.350 0.018 285);
+  --ink-3:         oklch(0.445 0.016 285);
+  --ink-4:         oklch(0.535 0.014 285);
 
   /* State accents. Light needs these DARKER, not inverted: arcdoq's dark amber
      sits at L 0.80, which is invisible on a 0.988 canvas. */
@@ -49,6 +63,19 @@
   --accent:        oklch(0.520 0.190 293);
   --accent-ring:   oklch(0.520 0.190 293 / 0.30);
   --accent-fill:   oklch(0.520 0.190 293 / 0.10);
+  /* --accent is a UI colour and passes the 3:1 that rings, fills and borders
+     owe. As TEXT on this canvas it is 3.27:1, and inline links are text — so
+     every link in prose was below AA in light theme. Split rather than darken:
+     darkening --accent would drag the focus ring and the active-nav fill along
+     with it for a threshold they already meet, and it would still not bind a
+     customer who overrides the token.
+     DERIVED, not a second free value, so a customer override follows it here
+     automatically. Mixed toward --ink rather than black to stay in the theme's
+     own family. 72% measures 5.18:1 — chosen over 80% (4.54:1) for margin,
+     since a customer picking a lighter accent should not silently fall through
+     the floor. No mix can guarantee AA for an arbitrary override; this only
+     makes the common case correct instead of wrong. */
+  --accent-text:   color-mix(in oklch, var(--accent) 72%, var(--ink));
 
   /* Shape + motion, theme-independent */
   --radius:        11px;
@@ -89,10 +116,15 @@
   --line:          oklch(0.300 0.018 285);
   --line-strong:   oklch(0.360 0.020 285);
 
+  /* Same AA floor as the light ladder, and dark failed it too: --ink-4 at
+     L 0.530 was 3.73:1. Dark has room to lift the bottom rung rather than
+     compress from the top, but not enough to lift it alone — 0.600 against an
+     --ink-3 of 0.660 leaves a 0.06 step, which is two rungs reading as one. So
+     the middle moves with it. Measured: 17.80 / 12.07 / 7.33 / 4.97. */
   --ink:           oklch(0.965 0.006 285);
-  --ink-2:         oklch(0.820 0.012 285);
-  --ink-3:         oklch(0.660 0.014 285);
-  --ink-4:         oklch(0.530 0.014 285);
+  --ink-2:         oklch(0.840 0.012 285);
+  --ink-3:         oklch(0.700 0.014 285);
+  --ink-4:         oklch(0.600 0.014 285);
 
   --amber:         oklch(0.800 0.135 78);
   --amber-dim:     oklch(0.580 0.095 78);
@@ -105,6 +137,10 @@
   --accent:        oklch(0.780 0.150 296);
   --accent-ring:   oklch(0.780 0.150 296 / 0.28);
   --accent-fill:   oklch(0.780 0.150 296 / 0.14);
+  /* Dark needs no correction — the accent is already 8.54:1 as text here. Held
+     to --accent exactly rather than mixed, so the dark theme's links keep the
+     brand hue at full strength and only the theme that had a problem changes. */
+  --accent-text:   var(--accent);
 
   --lift:          0 1px 2px oklch(0.100 0.020 285 / 0.40),
                    0 8px 24px oklch(0.100 0.020 285 / 0.30);
