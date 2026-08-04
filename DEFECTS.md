@@ -516,7 +516,8 @@ rename-hostile, or the diff has to compare on something stabler.
 
 #### At <=860px no group other than the reader's current one is reachable, and the home page's nav is a single self-link
 
-`src/theme/viewer.css:600` · **high**
+`src/theme/viewer.css:600` · **medium — was high; see the 2026-08-04 correction
+below, which overturns the load-bearing half of what follows**
 
 `.side .nav-g { display: none }` + the `:has()` override leave exactly one
 group visible, and nothing else in the shell replaces it. The only other in-
@@ -546,6 +547,27 @@ severity depends on the group: on a rules page the surviving group is the
 whole Rules ledger, so intra-Rules movement still works — the collapse only
 strands you on single-page groups, which is what "Start here", "Guides" and
 "Status" conventionally are.
+
+*Superseded in part, 2026-08-04 — checked against a real corpus rather than the
+fixture:* `nimbarc/arcdoq-docs` now has a one-page **Guides** group, which is
+precisely the shape above. At 390px its guide page shows one nav group holding
+one link, and that link points at the page the reader is already on. Reproduced
+through a same-origin iframe, since Chrome on macOS will not resize below ~606px.
+So the collapse is exactly as described.
+
+**But "search cannot substitute" no longer holds, and it was the load-bearing
+half.** The search rebuild removed the `fetch` and bakes the whole corpus into
+`search.html` as live links — the arcdoq build indexes 93 rows, including that
+guide and the Deploy ledger — and `viewer.js` now makes no network call at all.
+The search control is in the shell at 390px, so a phone reader is one tap from a
+browsable index of the entire site rather than stranded, and it survives
+JavaScript being off because the list is baked rather than fetched.
+
+What is left is real but smaller: at <=860px you can **search** the site and
+still cannot **browse** it, so a reader who does not know what to search for has
+only the wordmark. Worth fixing — a disclosure that reveals the other groups is
+the obvious shape — but it is not the dead end this entry described, and it
+should not be queued as one.
 
 #### --mark-w is the only rem length in an all-px stylesheet, so a raised browser font size steals the reading column instead of enlarging text
 
