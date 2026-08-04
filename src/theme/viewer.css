@@ -114,7 +114,12 @@ code, kbd, .mono, .cite, .rule-id, .chip { font-family: 'JetBrains Mono', ui-mon
 main {
   min-width: 0;
   padding: 40px 0 140px;
-  --mark-w: 11.5rem;
+  /* px, and on purpose. This was the one rem length in a stylesheet whose every
+     font-size is px, so raising the browser's default font size moved this
+     channel and nothing else — and it takes its width straight out of the
+     `minmax(0, 1fr)` prose track beside it. The reader who asked for larger
+     text got about 80px less prose and not one larger character. */
+  --mark-w: 184px;
   scroll-margin-top: 70px;
 }
 
@@ -193,6 +198,17 @@ main {
    landed one pixel to the LEFT of its parent's, because .side a carries a
    -9px margin, and the ledger read as a flat list of unrelated names. */
 .area > ul a { font-size: 13px; padding-left: 22px; }
+
+/* The one way out of the phone collapse, and it is a route rather than a
+   disclosure. Below 860px the nav keeps at most the group holding the current
+   page, so a reader who does not know what to search for has nowhere to go.
+   `search.html` already bakes the whole corpus as a browsable index and turns
+   its own column upside down to be one, so the answer is a link to it: a
+   disclosure would be a second in-page copy of the nav, and a second control
+   meaning `index` on a page that already carries the in-flow rail. It is one
+   more ledger line — a name and a count — because that is what it is.
+   Hidden above the collapse point, where the whole ledger is on screen. */
+.side-index { display: none; }
 
 /* ── page warrant: replaces the breadcrumb ───────────────────────────────── */
 
@@ -676,7 +692,7 @@ table.no-head thead { display: none; }
 @media screen and (max-width: 1180px) {
   .frame { grid-template-columns: 232px minmax(0, 1fr); }
   .rail { display: none; }
-  main { --mark-w: 10rem; }
+  main { --mark-w: 160px; }
 }
 
 @media screen and (max-width: 860px) {
@@ -695,14 +711,26 @@ table.no-head thead { display: none; }
     border-right: 0;
     border-bottom: 1px solid var(--line-soft); margin-bottom: 10px;
   }
-  /* Collapsed to the group holding the current page. Guarded by @supports,
-     because the hiding rule is plain CSS and the unhiding rule is not: an
-     engine without :has() drops line two, keeps line one, and renders an empty
-     sidebar on every page of the site. The fallback has to be the whole nav,
-     never nothing. */
+  /* Collapsed to the group holding the current page, and only while that group
+     can still take the reader somewhere. Guarded by @supports, because the
+     hiding rule is plain CSS and the unhiding rule is not: an engine without
+     :has() drops line two, keeps line one, and renders an empty sidebar on
+     every page of the site. The fallback has to be the whole nav, never
+     nothing.
+
+     The second :has() is the whole of the difference. A group whose only link
+     is the page already open is not navigation — it is the H1 restated a
+     screen-inch above itself, which is the breadcrumb this design cut, arrived
+     at by a rule about aria-current rather than by a decision. Three of the 22
+     pages in the first real corpus rendered exactly that, and the one most
+     likely to be opened from a pasted link on a phone was the hand-written
+     guide. Nothing replaces it: the title says the same thing, and .side-index
+     below is the way out. */
   @supports selector(:has(a)) {
     .side .nav-g { display: none; }
-    .side .nav-g:has(a[aria-current='page']) { display: block; }
+    .side .nav-g:has(a[aria-current='page']):has(a:not([aria-current])) {
+      display: block;
+    }
     /* The search route is the one page with no aria-current anywhere — it is
        the generator's surface, not a page of the corpus, so the nav cannot
        name it. Collapsing by `the group holding the current page` therefore
@@ -710,6 +738,23 @@ table.no-head thead { display: none; }
        collapsing: a reader who came to browse should see every group. */
     [data-page='search'] .side .nav-g { display: block; }
   }
+  /* Scoped to `.side`, because `.side a { display: block }` outranks a bare
+     `.side-index` and the count lands jammed against the label instead of
+     ledgered against the right edge. */
+  .side .side-index {
+    display: flex; align-items: center; gap: 10px;
+    /* Thumb-sized, like the in-flow rail's summary. It is the only control in
+       the sidebar at this width. */
+    min-height: 44px; margin-top: 14px;
+  }
+  .side .side-index span {
+    margin-left: auto;
+    font: 500 11px/1 'JetBrains Mono', monospace; color: var(--ink-4);
+    font-variant-numeric: tabular-nums;
+  }
+  /* …except on the route itself, where every group is already on screen and
+     the row would point at the page it sits on. */
+  [data-page='search'] .side-index { display: none; }
   /* …but uncollapsed, that nav is most of a screen, and it sits above main in
      the source order every other page wants. The box is the entire reason this
      page exists, so on the route the column inverts: search first, then the

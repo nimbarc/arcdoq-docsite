@@ -1106,7 +1106,7 @@ function renderNav(pages, current) {
     }).join('')
   }
 
-  return navGroups.map((g) => {
+  const groups = navGroups.map((g) => {
     const note = GROUP_NOTE[g.group]
     const head = `<h2>${esc(g.group)}${note ? `<span>${esc(note)}</span>` : ''}</h2>`
     if (g.group === 'Rules') {
@@ -1119,6 +1119,15 @@ function renderNav(pages, current) {
     return `<section class="nav-g${gap ? ' is-gap' : ''}">${head}<ul>${
       g.pages.map((r) => link(r)).join('')}</ul></section>`
   }).join('')
+
+  // The way out of the phone collapse, which keeps at most the group holding
+  // the current page. It is on every page and is spent only below 860px, where
+  // the rest of the ledger is not on screen: a route to the index that already
+  // exists, rather than a second copy of this nav hidden behind a control. The
+  // count is the ledger's own idiom, and it counts pages because that is what
+  // it is offering — the route indexes every rule as well.
+  return `${groups}<a class="side-index" href="search.html">All pages<span>${
+    pages.length}</span></a>`
 }
 
 const htmlName = (rel) => rel.replace(/\//g, '-').replace(/\.md$/, '.html')
