@@ -50,9 +50,10 @@ start publishing something you did not ask it to.
 
 ### Letting readers record a walk
 
-A guide is `verified: never` until a person walks it, and until now the only way
-to say they had was a commit to this repo. That barrier is the reason walked
-guides stay marked unwalked.
+A guide is `verified: never` until a person walks it, and saying they did means
+committing to this repo — which the people who actually walk guides usually
+cannot do. So guides that have been walked stay marked as though they never
+were.
 
 ```json
 { "walk": true }
