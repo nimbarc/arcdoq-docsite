@@ -23,6 +23,7 @@ from the pinned tag, not from memory:
 - `README.md` — what the generator reads and emits
 - `docs.config.example.json` — every config key
 - `DESIGN.md` — why the rendering is the way it is
+- `PRODUCT.md` — who a generated page is for, and what it may never overclaim
 
 If the corpus already has a `docs.config.json`, its `requires` above must be
 satisfied by the tag in the consumer's workflow. A skill newer than its package
@@ -280,6 +281,50 @@ rather than stamping the page once. A walk that leaves what it could not reach
 unmarked is worse than no walk, because it launders a source-drafted guess into
 an observation. End with a section naming what a human still has to check, in
 priority order.
+
+### Letting a reader record a walk, without a commit
+
+Everything above is written by whoever holds the repo. That is the barrier: a
+tester who walks a guide and finds it still works cannot say so without a commit,
+so `verified:` stays `never` on guides people have actually walked.
+
+Turn the write path on in `docs.config.json`:
+
+```json
+{ "walk": true }
+```
+
+Off by default, and the default is not timidity: the control posts a per-render
+token only a HOST can mint, so a corpus built with `npx arcdoq-docsite build` and
+served from anywhere else ships a button that can never work. Turn it on when the
+corpus is published somewhere that can mint one.
+
+What it adds, on guides and flows only — a rules page gets nothing, because a rule
+is computed from tests and was never the surface anyone walks:
+
+- a **Mark walked** button under each step, one click, no JavaScript required
+- a name field, filled once, above the page
+
+**The state stops being a build-time value.** With `walk` on, the provenance strip
+renders your frontmatter into slots a host substitutes live state into. Your
+`verified:` / `walked-by-agent:` values are still what a standalone build shows,
+and still what the machine surface reports. They become the DEFAULT rather than
+the answer — a host that has an observed walk overwrites the row, and a host with
+nothing leaves your claim alone.
+
+So keep writing them exactly as above. A value out of the repo is rendered as a
+CLAIM (weaker, italic) and an observed walk as PROVEN, which is the honest
+difference: your frontmatter is the publisher attesting to their own verification.
+
+**Visibility matters, and the wrong choice fails silently.** A walk cannot be
+recorded on a `public` site — the endpoint refuses it, because a public site is
+served with no cookie at all and the write would be open to the internet. The
+buttons still render and every one of them is refused. Publish `private` (walkers
+are signed-in members and get a proven name) or set the site to passcode in the
+app (walkers hold a shared secret, so the name is self-asserted). A machine deploy
+cannot create a passcode site by design — a passcode does not belong in a
+workflow file — so create it `private` and flip it in the app if you want the
+passcode tier; a republish keeps whatever the site already is.
 
 ### Walking a screen
 

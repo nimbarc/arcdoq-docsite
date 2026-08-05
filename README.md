@@ -17,7 +17,7 @@ own:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nimbarc/arcdoq-docsite@v0.9.0
+- uses: nimbarc/arcdoq-docsite@v0.9.1
   with:
     corpus: .
 ```
@@ -31,7 +31,7 @@ Add a token and a slug, and the same step ships the site:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nimbarc/arcdoq-docsite@v0.9.0
+- uses: nimbarc/arcdoq-docsite@v0.9.1
   with:
     corpus: .
     site: docs
@@ -47,6 +47,37 @@ sees your repo.
 **Publishing is opt-in by the presence of the token.** Omit `arcdoq-token` and
 the action only builds, exactly as it did before — so bumping the tag can never
 start publishing something you did not ask it to.
+
+### Letting readers record a walk
+
+A guide is `verified: never` until a person walks it, and until now the only way
+to say they had was a commit to this repo. That barrier is the reason walked
+guides stay marked unwalked.
+
+```json
+{ "walk": true }
+```
+
+in `docs.config.json` adds a one-click **Mark walked** button under each step of
+every guide and flow, plus a name field filled once. It works with JavaScript
+off — the form posts and the host sends you back to the step — and with
+JavaScript on nothing reloads at all.
+
+Off by default. The control posts a per-render token only a **host** can mint, so
+a corpus built and served anywhere else would ship a button that can never work.
+
+Two things to know before turning it on:
+
+- **It needs a non-public site.** A walk cannot be recorded on a `public` one:
+  that page is served with no cookie at all, so the write would be open to the
+  internet, and the endpoint refuses it. Deploy `private`, or create it private
+  and set a passcode in the app — a machine deploy cannot create a passcode site,
+  because a passcode does not belong in a workflow file.
+- **Your frontmatter becomes the default, not the answer.** `verified:` and
+  `walked-by-agent:` still render, still ship in `rules.json`, and are still what
+  a standalone build shows. A host holding an observed walk substitutes over
+  them, and one holding nothing leaves them alone. A value out of this repo is
+  rendered as a *claim*; an observed walk as *proven*.
 
 **Only your default branch publishes, and only from a trusted trigger.** A docs
 repo usually runs `on: [push, pull_request]`, and a pull request from a branch in
@@ -118,7 +149,7 @@ GitHub PAT. That has already happened once, within an hour of a first publish.
 ## Install
 
 ```bash
-npm i -D github:nimbarc/arcdoq-docsite#v0.9.0
+npm i -D github:nimbarc/arcdoq-docsite#v0.9.1
 ```
 
 A git dependency, versioned by tag. No registry and no auth needed. Publishing

@@ -1,6 +1,6 @@
 {
   "name": "arcdoq-docsite",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Turns a markdown corpus into a designed, self-contained static docs site.",
   "type": "module",
   "license": "MIT",

@@ -6,7 +6,7 @@ author: arcdoq
 # the run step installs `github.action_ref`. One version, one line, and a
 # consumer needs no package.json, no lockfile and no dependency of their own.
 #
-#   - uses: nimbarc/arcdoq-docsite@v0.9.0
+#   - uses: nimbarc/arcdoq-docsite@v0.9.1
 #
 # Bumping the tag in the workflow is the whole upgrade path. That is the same
 # argument as the package itself: a fork freezes, a version moves.
@@ -75,6 +75,13 @@ inputs:
       default and refuses to guess, because a machine deploy has nobody watching
       and the wrong guess is either an outage or a leak. Later deploys can omit it:
       a republish keeps whatever the site already is.
+
+      ALSO REQUIRED FOR WALKS: a corpus with `"walk": true` cannot record on a
+      `public` site. The endpoint refuses one, because a public page is served
+      with no cookie at all and the write would be open to the internet — the
+      buttons render and every mark is refused. Deploy `private`, or create it
+      private and set the passcode in the app (a machine deploy cannot create a
+      passcode site: a passcode does not belong in a workflow file).
 
       For internal documentation, `private` is almost always what you want. It is
       honoured only on CREATE — changing a live site's visibility from here is
