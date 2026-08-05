@@ -50,6 +50,16 @@ const defaults = {
   // other customer is how a product becomes a fork of itself. Corpora declare
   // their own map in docs.config.json; see docs.config.example.json.
   areaLabels: {},
+  // Walk recording (arcdoq#43). OFF unless a corpus asks for it, and the default
+  // matters more than the feature: the control posts a per-render token that only
+  // a HOST can mint, so a plain `npx arcdoq-docsite build` would otherwise ship a
+  // button wired to a literal `@@ARCDOQ_WALK_TOKEN@@` that can never work. A dead
+  // control in the default path of an MIT package is worse than no control.
+  //
+  // Turn it on for a corpus published behind a passcode, which is the only tier
+  // that can record: arcdoq refuses a walk on a public site, because its gate
+  // admits one with no cookie at all and the endpoint would be world-writable.
+  walk: false,
   status: {
     // README.md, after 56c1538: `implemented` means the cited paths MATCH
     // production, not that anyone exercised the behaviour there. The earlier
@@ -985,6 +995,12 @@ function renderPage(page, ctx) {
     ${unconfirmed.map((r) => `<a href="#${r.anchor}">${esc(r.id)}</a>`).join('')}</p>` : ''
 
   const kind = genreOf(page.relPath)
+  // Recording is for NARRATIVES. A rule is computed from tests; a guide is the
+  // thing a person walks, and #43's whole question — "is this walkthrough worth
+  // following?" — is asked about a walkthrough. It also settles DESIGN.md's third
+  // test the right way round: a 20 KB page of 35 rules gets no buttons at all,
+  // because it was never the surface being walked.
+  const walkOn = config.walk === true && /^(flows|guides)\//.test(page.relPath)
   // Keyed on the page's own `area:` frontmatter, which is the corpus's human
   // spelling of an area the nav keys on by directory. Both go through areaKey.
   const area = areaLabel(page.data.area) || page.data.area || ''
@@ -1010,13 +1026,28 @@ function renderPage(page, ctx) {
   // that stores each `data-*` as one exact-match facet would otherwise index
   // every prose step under an empty `rules` facet. Absence already reads as
   // "this step covers no rule" and costs nothing to ask about.
+  // Walk recording (arcdoq#43): one button per step, and it is a plain submit
+  // button rather than anything scripted. #44's constraint is that re-confirming
+  // "must cost ONE CLICK on a page the tester is already looking at" — churn only
+  // hurts in proportion to what it costs to clear — which rules out a dialog and
+  // rules out picking a step from a list.
+  //
+  // The whole page is inside ONE form, and each button carries its own step in
+  // `name`/`value`. That is what a submit button's name/value pair is FOR, and it
+  // buys the entire no-JS story with no script at all: one token, one name field
+  // filled once, N buttons, each posting exactly the step it sits under.
+  const mark = (id) => walkOn
+    ? `\n    <button class="walk-mark" type="submit" name="__arcdoq_fragment" value="${esc(id)}"
+      >Mark walked<span class="wm-hint" aria-hidden="true">this step</span></button>`
+    : ''
+
   const body = page.sections.map((s) => `<section class="${
     s.rules.length ? 'rule-group' : 'prose-group'}" id="${s.id}"${
     s.covers?.length ? ` data-rules="${esc(s.covers.join(' '))}"` : ''}>
     <h2>${inline(s.title)}${s.rules.length
       ? `<span class="sec-range">${s.rules[0].id} to ${s.rules[s.rules.length - 1].id}</span>` : ''}</h2>
     ${s.body.join('\n')}
-    ${s.rules.map((r) => renderRule(r, ctx)).join('\n')}
+    ${s.rules.map((r) => renderRule(r, ctx)).join('\n')}${mark(s.id)}
   </section>`).join('\n')
 
   const warrantBits = [`<span class="w-kind">${kind}</span>`]
@@ -1054,14 +1085,34 @@ function renderPage(page, ctx) {
   const root = genre ? `<article class="page" data-kind="${genre}"${
     page.covers?.length ? ` data-rules="${esc(page.covers.join(' '))}"` : ''}>\n` : ''
 
+  // ONE form spanning the strip and every step. The token is minted per render by
+  // the host, which is why the whole thing is opt-in: without a host there is no
+  // token and the control could never work.
+  //
+  // The name is SELF-ASSERTED and the markup says so rather than implying trust.
+  // A passcode is a shared secret, so everyone holding it is the same principal
+  // and this is a label, not evidence — the host records it as `claimed` and
+  // renders it weaker. Leaving it blank records an anonymous walk, which is still
+  // a true one: it is bound to the version and to the hash of the words walked.
+  const walkOpen = walkOn
+    ? `<form class="walk" method="post" action="__walk/record">
+  <input type="hidden" name="__arcdoq_walk_token" value="@@ARCDOQ_WALK_TOKEN@@">\n`
+    : ''
+  const walkName = walkOn
+    ? `<p class="walk-as"><label for="walk-as">Recording as</label>
+  <input id="walk-as" name="__arcdoq_name" type="text" autocomplete="name"
+    placeholder="your name (optional)" maxlength="60">
+  <span>Not verified. Leave it blank to record anonymously.</span></p>\n`
+    : ''
+
   return { html: `<div class="page-warrant">${
     warrantBits.join('<span class="w-sep" aria-hidden="true">·</span>')}</div>
-${renderProvenanceStrip(page, page.tally)}
-${root}<h1>${inline(page.title)}</h1>
+${walkOpen}${renderProvenanceStrip(page, page.tally)}
+${walkName}${root}<h1>${inline(page.title)}</h1>
 ${page.lead.join('\n')}
 ${ahead}
 ${renderRailFlow(page)}
-${body}${genre ? '\n</article>' : ''}` }
+${body}${genre ? '\n</article>' : ''}${walkOn ? '\n</form>' : ''}` }
 }
 
 /* ── the search route ────────────────────────────────────────────────────── */
