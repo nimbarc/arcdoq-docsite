@@ -310,10 +310,31 @@ argues for it and consumption argues against: a consumer storing each `data-*`
 as one exact-match facet would file every prose step in the corpus under an
 empty `rules` facet. Absence already answers the question.
 
-**Out of scope on purpose: the page's own `verified:` / `walked-by-agent:` /
-`walked-in:` state.** That is a fact about what someone did after the build, it
-is owned at serve time, and baking it into an attribute now would fix a public
-contract in the wrong place.
+**Settled: the page's own `verified:` / `walked-by-agent:` / `walked-in:` state
+is a SLOT, not a baked value** (#2). It really is a fact about what someone did
+after the build, so it is not written into an indexed `data-*` facet — that part
+of the earlier note stands. What changed is that "owned at serve time" now has a
+shape. The strip renders the repo's own frontmatter, so a standalone build still
+shows provenance, and each value sits in a `data-walk-slot` element whose text
+and two `data-walk-*` attributes a host may substitute live state into. The host
+writes strings; this template keeps every tag, class and rule.
+
+Three slots, one per door a walk arrives through — `walk-browser`, `walk-agent`,
+`walk-machine` — because an agent walk and a human walk are different claims: an
+agent proves the instructions are *followable*, a person proves *it worked for a
+person*. One merged field would let a scheduled bot clear a stale human walk;
+separate slots make that impossible rather than merely discouraged.
+
+A host that has no record for a door leaves that slot alone. It never writes
+"never" over a claim it simply cannot see — that would turn the publisher's own
+statement into a denial. The full agreement is arcdoq's
+`docs/WALK-SLOT-CONTRACT.md`; a rename on either side has to fail a build.
+
+**The state rides the slot element, never a wrapper inside it.** Substitution
+replaces the element's text, so a nested `<span data-tone>` is destroyed and the
+served page loses its styling. Anything reading the state at runtime — the key
+bar does — reads the attribute, which is the only copy still true after a host
+has written to it.
 
 ---
 

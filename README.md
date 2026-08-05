@@ -17,7 +17,7 @@ own:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nimbarc/arcdoq-docsite@v0.7.0
+- uses: nimbarc/arcdoq-docsite@v0.8.0
   with:
     corpus: .
 ```
@@ -31,7 +31,7 @@ Add a token and a slug, and the same step ships the site:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nimbarc/arcdoq-docsite@v0.7.0
+- uses: nimbarc/arcdoq-docsite@v0.8.0
   with:
     corpus: .
     site: docs
@@ -118,7 +118,7 @@ GitHub PAT. That has already happened once, within an hour of a first publish.
 ## Install
 
 ```bash
-npm i -D github:nimbarc/arcdoq-docsite#v0.7.0
+npm i -D github:nimbarc/arcdoq-docsite#v0.8.0
 ```
 
 A git dependency, versioned by tag. No registry and no auth needed. Publishing
@@ -360,8 +360,8 @@ dist/
   index.html          a copy of the first published page
   <page>.html         one per published page
   rules.json          every rule with id, status, tier, caveats, tests, sources,
-                      the flows and guides that narrate it, and the code state
-                      it was all computed against
+                      the flows and guides that narrate it with their walk
+                      state, and the code state it was all computed against
   tokens.css          the portable primitive ladder, light and dark
   viewer.css
   viewer.js
@@ -375,9 +375,16 @@ than a fuzzy text match, and — when the corpus declares an `environment` file 
 `appearsIn` answers the reader's other question, the one a status cannot: *is
 there a walkthrough for this, and has anyone actually walked it?* A flow or guide
 links down to the rules behind its steps; that link is read back so a rule names
-the narratives that contain it, each carrying its own `verified:` state. Empty
+the narratives that contain it, each carrying its own `walk` state. Empty
 when nothing narrates the rule. It says a narrative exists and how far it has
 been checked — never that the rule itself was observed.
+
+Each entry's `walk` carries `verified`, `walkedByAgent` and `walkedIn` **exactly
+as the corpus wrote them**, `never` included. `null` means the key was absent,
+which is a different fact: *"written, and it says nobody has walked it"* is not
+the same as *"nothing was said"*, and an agent deciding whether a walkthrough is
+worth following needs to tell them apart. (Before schema 3 `never` collapsed to
+`null` and the machine surface could not.)
 
 The same values ride on the rendered page: each rule's `<article>` carries
 `data-rule-id`, `data-status`, `data-tier` and `data-origin`, so a reader that

@@ -141,13 +141,18 @@
   const bar = document.querySelector('.keybar')
   if (key && bar) {
     const marks = [...key.querySelectorAll('dt')].map((dt) => dt.innerHTML).join('')
-    const pv = document.querySelector('.page-provenance [data-tone="pending"]')
+    // Read the BROWSER slot's live tone, not a baked marker. A host substitutes walk state into
+    // these slots at serve time, so a chip derived from the build-time markup would keep announcing
+    // "never walked" on a page somebody has since walked — the drift the slots exist to end. The
+    // attribute is what the host rewrites, so reading it here is reading today's answer.
+    const pvSlot = document.querySelector('.page-provenance [data-walk-slot="walk-browser"]')
+    const pv = pvSlot && pvSlot.getAttribute('data-walk-tone') === 'never'
     bar.innerHTML = marks.replace(/<dt[^>]*>/g, '').replace(/<\/dt>/g, '')
     ;[...key.querySelectorAll('div')].forEach(() => {})
     bar.innerHTML = [...key.children].map((d) => {
       const dt = d.querySelector('dt')
       return `<span>${dt.innerHTML}</span>`
-    }).join('') + (pv ? `<span class="kb-state">Human-verified <b>never</b></span>` : '')
+    }).join('') + (pv ? `<span class="kb-state">Walked in a browser <b>never</b></span>` : '')
     const io = new IntersectionObserver(([e]) => {
       const off = !e.isIntersecting && e.boundingClientRect.top < 0
       bar.hidden = !off

@@ -489,7 +489,24 @@ main h3 { font-size: 16.5px; font-weight: 600; letter-spacing: -0.014em; color: 
   text-transform: uppercase; letter-spacing: 0.08em; padding-top: 2px;
 }
 .page-provenance dd { margin: 0; color: var(--ink-2); }
-.page-provenance [data-tone='pending'] { color: var(--amber); font-weight: 600; }
+
+/* ── walk slots ──────────────────────────────────────────────────────────────
+   Three doors, three rows, and two attributes a host substitutes alongside the
+   text (arcdoq `docs/WALK-SLOT-CONTRACT.md`). The selectors have to be here
+   rather than in the substituting host: it writes VALUES, never markup and
+   never style, which is what keeps a tag-pinned build tag-pinned.
+
+   `claimed` is the one that has to read differently and not merely decoratively.
+   A claimed name came out of the publisher's own repo, or was typed into a box
+   on a passcode site — nobody proved it. Rendering it identically to a name an
+   authenticated door resolved is the laundering this whole lane exists to
+   prevent, so it steps down a rank of ink and takes an italic. */
+.page-provenance [data-walk-tone='never'] { color: var(--amber); font-weight: 600; }
+.page-provenance [data-walk-proof='claimed'] {
+  color: var(--ink-4);
+  font-style: italic;
+}
+.page-provenance [data-walk-tone='changed'] { color: var(--amber); }
 .pv-split { color: var(--ink-4); }
 .pv-split::before { content: '· '; }
 
