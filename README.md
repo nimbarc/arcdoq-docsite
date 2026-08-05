@@ -17,7 +17,7 @@ own:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nimbarc/arcdoq-docsite@v0.5.0
+- uses: nimbarc/arcdoq-docsite@v0.7.0
   with:
     corpus: .
 ```
@@ -31,7 +31,7 @@ Add a token and a slug, and the same step ships the site:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nimbarc/arcdoq-docsite@v0.5.0
+- uses: nimbarc/arcdoq-docsite@v0.7.0
   with:
     corpus: .
     site: docs
@@ -118,7 +118,7 @@ GitHub PAT. That has already happened once, within an hour of a first publish.
 ## Install
 
 ```bash
-npm i -D github:nimbarc/arcdoq-docsite#v0.5.0
+npm i -D github:nimbarc/arcdoq-docsite#v0.7.0
 ```
 
 A git dependency, versioned by tag. No registry and no auth needed. Publishing
@@ -382,6 +382,64 @@ been checked — never that the rule itself was observed.
 The same values ride on the rendered page: each rule's `<article>` carries
 `data-rule-id`, `data-status`, `data-tier` and `data-origin`, so a reader that
 parses the HTML is never told less than one that parses the sidecar.
+
+### The attributes on the page, as a contract
+
+A content index that harvests `data-*` off the HTML is reading a public
+interface, so here is the whole of it. It is stated rather than implied because
+it is shared with software in another repository, and a shape that only exists
+as a habit is one a later change widens without noticing.
+
+| Element | Attribute | Value |
+|---|---|---|
+| `<article class="rule">` | `data-kind` | `rule` |
+| | `data-rule-id` | the rule's ID, e.g. `ORD-004` |
+| | `data-status` | the corpus's own status token, unchanged |
+| | `data-tier` | `confirmed` · `unconfirmed` · `broken` · `neutral` |
+| | `data-origin` | `computed` · `asserted` · `none` |
+| `<article class="page">` | `data-kind` | `guide` · `flow` — the page's genre |
+| | `data-rules` | every rule the page links down to |
+| `<section class="prose-group">` | `data-rules` | the rules that step links down to |
+
+Four properties hold across all of it, and each one is asserted by a test:
+
+- **Every attribute sits on the open tag of the block that owns the fact** — an
+  `<article>` or a `<section>`, never a descendant of one. A `data-*` on the
+  paragraph holding a link, or on the link, is not part of this contract and is
+  not collected by anything.
+- **A multi-value attribute is whitespace-separated**, the way `class` and `rel`
+  already are. `data-rules="ORD-002 ORD-003"` is the shape. A step usually
+  covers more than one rule and HTML cannot repeat an attribute.
+- **An attribute with nothing to say is absent**, never empty. A consumer that
+  files each `data-*` as an exact-match facet would otherwise index every prose
+  step under an empty `rules`.
+- **No value contains a quote character**, and every key is lowercase. `copy`,
+  `theme`, `cols`, `label` and `tone` are avoided as key names: content indexes
+  treat them as presentational and drop them.
+
+`data-kind` is the genre, single-valued and opaque, and always one word — a
+consumer that stores it verbatim rather than tokenising it still gets a value
+that matches a filter for `guide`. It is the genre of the **entity**, not of the
+page: a rule declared inside a guide is still `rule`, on a root that is still
+`guide`. Every block that has a genre declares it; none is left to be inferred
+from the presence of another attribute.
+
+Only guides and flows carry a page root — a
+rules page's root would be a block whose text is every rule on the page,
+duplicating each rule's own `<article>` for anything reading both. The page
+warrant and the provenance strip sit outside that root, because they are the
+generator describing the document rather than the document's own prose.
+
+The root's `data-rules` is not a convenience rollup of its steps'. *Which
+walkthroughs cover this?* is asked about the walkthrough, and the root is the
+only block a rule linked from the page's lead can appear on, because the lead
+belongs to no step. A guide that mentions a rule once, in its introduction,
+would otherwise be unfindable by an ID it genuinely covers.
+
+`data-rules` and `appearsIn` are one fact read from opposite ends — the step
+names the rules it covers, the rule names the narratives that cover it — and
+both are derived from the same scan of the rendered page, so a build cannot
+answer the two questions differently.
 
 ## Theming
 

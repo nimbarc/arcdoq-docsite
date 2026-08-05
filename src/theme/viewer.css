@@ -236,8 +236,11 @@ h1 {
   font-size: 31px; font-weight: 700; line-height: 1.14;
   letter-spacing: -0.03em; color: var(--ink); text-wrap: balance;
 }
-main > p, .rule-group > p, .rule-body > p { max-width: 68ch; }
-main > p:first-of-type { font-size: 16.5px; color: var(--ink-2); }
+/* `.page` is the guide/flow page root — the element that carries the genre for
+   a content index. It wraps the lead, so the lead's own treatment has to reach
+   through it or every guide loses both its measure and its lead-in size. */
+main > p, .page > p, .rule-group > p, .rule-body > p { max-width: 68ch; }
+main > p:first-of-type, .page > p:first-of-type { font-size: 16.5px; color: var(--ink-2); }
 
 .rule-group, .prose-group { margin-top: 46px; }
 /* A `##` that groups rules is furniture: set it as a label. A `##` on a guide
