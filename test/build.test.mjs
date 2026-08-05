@@ -171,7 +171,46 @@ describe('provenance', () => {
         navigation: { groups: [{ group: 'Guides', pages: ['g/a'] }] } }),
       'g/a.md': '---\nwalked-by-agent: 2031-03-04\n---\n\n# A\n\nBody.\n',
     })
-    assert.match(r2.read('g-a.html'), /<dd><span data-tone="pending">never<\/span><\/dd>/)
+    const out = r2.read('g-a.html')
+    // The state rides the SLOT's own attribute, never a nested span: a host replaces the element's
+    // text, so anything inside it is destroyed on substitution and a served "never" would lose its
+    // styling. The attribute survives because the host rewrites its value, not the tag.
+    assert.match(out, /data-walk-slot="walk-browser" data-walk-tone="never" data-walk-proof="none">never</)
+  })
+
+  // The strip is now a SLOT SET a host substitutes live state into, so the names and the default
+  // attribute values are a cross-repo contract (arcdoq `docs/WALK-SLOT-CONTRACT.md`). A rename here
+  // must fail this build rather than silently render a stale default on every served page forever.
+  test('every walk door gets its own slot, with the documented attributes', () => {
+    for (const name of ['walk-browser', 'walk-agent', 'walk-machine']) {
+      assert.match(
+        html,
+        new RegExp(`<dd data-walk-slot="${name}" data-walk-tone="(walked|never)" data-walk-proof="(claimed|proven|none)">`),
+        `${name} slot missing or malformed`
+      )
+    }
+  })
+
+  // A value that came out of the publisher's own repo is the publisher attesting to their own
+  // verification. It is a claim, and the markup has to say so, or substitution has nothing to weaken.
+  test("the repo's own claim is marked claimed, never proven", () => {
+    // This fixture is `verified: never` with an agent walk, so the claim rides the AGENT slot and
+    // the browser slot correctly reads never — which is itself the distinction the split buys.
+    assert.ok(!html.includes('data-walk-proof="proven"'))
+    assert.match(html, /data-walk-slot="walk-agent" data-walk-tone="walked" data-walk-proof="claimed"/)
+    assert.match(html, /data-walk-slot="walk-browser" data-walk-tone="never" data-walk-proof="none"/)
+  })
+
+  // A machine walk is something only a host can observe, so a standalone build must never imply one.
+  test('the machine slot is always never in a standalone build', () => {
+    assert.match(html, /data-walk-slot="walk-machine" data-walk-tone="never" data-walk-proof="none"/)
+  })
+
+  // One fact, one place. A second baked copy in the warrant line would sit beside a substituted slot
+  // showing a different answer.
+  test('walk state lives ONLY in the strip, never also in the warrant line', () => {
+    const warrant = /<div class="page-warrant">[\s\S]*?<\/div>/.exec(html)[0]
+    assert.ok(!/Verified/.test(warrant), 'the warrant must not bake a verified date')
   })
 
   test('claim counts come from the render, so the strip cannot disagree', () => {
@@ -197,11 +236,15 @@ describe('page kinds', () => {
     assert.match(flow, /<div class="page-warrant"><span class="w-kind">Flow<\/span>/)
   })
 
-  test('a flow carries no provenance strip, because nobody walked it', () => {
-    // The strip is gated on `walked-by-agent`. A flow is derived from rules,
-    // not from opening the product, so rendering one would invent a walk.
-    assert.ok(!flow.includes('page-provenance'))
-    assert.match(flow, /Verified 2031-03-04/)
+  test('a flow DOES carry a provenance strip — a narrative is the thing that gets walked', () => {
+    // This asserted the opposite until arcdoq-docsite#2. The strip was gated on `walked-by-agent`,
+    // so a flow or guide that only a PERSON had walked rendered no strip at all — the one surface
+    // built for this loop turning on for everyone except the party that matters. On a narrative,
+    // "nobody has ever walked this" is the single most useful line on the page.
+    assert.ok(flow.includes('page-provenance'))
+    assert.match(flow, /data-walk-slot="walk-browser"/)
+    // Its own `verified:` date is the browser slot's default, and appears there rather than twice.
+    assert.match(flow, /data-walk-slot="walk-browser"[^>]*>2031-03-04<\/dd>/)
   })
 
   test("a flow's `##` is the reader's own heading, not a rule-group label", () => {
@@ -280,8 +323,36 @@ describe('the narratives a rule appears in', () => {
   })
 
   test('rules.json says the same thing, so the sidecar cannot disagree', () => {
-    assert.deepEqual(rule.appearsIn.map((a) => [a.kind, a.verified]),
-      [['Flow', '2031-03-04'], ['Guide', null]])
+    assert.deepEqual(rule.appearsIn.map((a) => [a.kind, a.walk.verified]),
+      [['Flow', '2031-03-04'], ['Guide', 'never']])
+  })
+
+  // arcdoq-docsite#2, part 3. `verified: 'never'` used to flatten to null, so the machine surface
+  // could not tell "an agent walked this in stage and prod" from "no information" — which is
+  // precisely the state an attestation gets written against.
+  test('the sidecar distinguishes "never walked" from "nothing was said"', () => {
+    const r2 = adHoc({
+      'docs.json': JSON.stringify({ name: 'x', navigation: { groups: [
+        { group: 'Rules', pages: ['rules/a'] },
+        { group: 'Guides', pages: ['guides/said', 'guides/silent'] },
+      ] } }),
+      'rules/a.md': '---\narea: x\n---\n\n# A\n\n<a id="aaa-001"></a>\n' +
+        '### AAA-001 — A thing is true\n\n**Source:** `core:x.cs`\n',
+      'guides/said.md': '---\nverified: never\nwalked-by-agent: 2031-03-04\n' +
+        'walked-in: stage, prod\n---\n\n# Said\n\nCovers [AAA-001](../rules/a.md#aaa-001).\n',
+      'guides/silent.md': '---\ntitle: Silent\n---\n\n# Silent\n\nCovers [AAA-001](../rules/a.md#aaa-001).\n',
+    })
+    const byTitle = Object.fromEntries(
+      JSON.parse(r2.read('rules.json')).rules[0].appearsIn.map((a) => [a.title, a.walk])
+    )
+    // Stated: a human walk that explicitly never happened, and an agent walk that did.
+    assert.deepEqual(byTitle['Said'], {
+      verified: 'never', walkedByAgent: '2031-03-04', walkedIn: 'stage, prod',
+    })
+    // Unstated: nothing is known either way, and it must not read as "never".
+    assert.deepEqual(byTitle['Silent'], {
+      verified: null, walkedByAgent: null, walkedIn: null,
+    })
   })
 
   test('a rule nothing narrates gains nothing at all', () => {
@@ -981,7 +1052,7 @@ describe('legal corpora that used to break the build', () => {
       'docs.json': docsJson(['rules/a/x']),
       'rules/a/x.md': '---\nwalked-by-agent: 2031-03-04\nverified: never\nsources:\n  - repo: core\n---\n\n# A\n\nBody.\n',
     })
-    assert.match(r.read('rules-a-x.html'), /Agent walk/)
+    assert.match(r.read('rules-a-x.html'), /data-walk-slot="walk-agent"[^>]*>2031-03-04</)
   })
 
   test('two corpus paths that flatten to one filename are named, not silently merged', () => {
@@ -1364,11 +1435,11 @@ describe('the search route', () => {
   })
 
   test('rules.json is untouched by any of it', () => {
-    // The build-over-build diff's door: stable IDs, schema 2, caveat kinds an
+    // The build-over-build diff's door: stable IDs, a declared schema, caveat kinds an
     // enum. The route reads the same data and adds nothing to the contract.
     const j = JSON.parse(read(r.out, 'rules.json'))
     assert.deepEqual(Object.keys(j), ['schema', 'generatedAt', 'name', 'environment', 'rules'])
-    assert.equal(j.schema, 2)
+    assert.equal(j.schema, 3)
   })
 })
 

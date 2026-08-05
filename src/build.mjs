@@ -521,8 +521,8 @@ function renderWarrant(meta, appearances, anchor) {
       const id = `${anchor}-nar${++narN}`
       return `<dd><a class="w-nar" href="${htmlName(a.page)}" ` +
         `aria-describedby="${id}">${esc(a.title)}</a>` +
-        (a.verified
-          ? `<span class="w-vfy" id="${id}">verified ${esc(a.verified)}</span>`
+        (a.walk.verified && a.walk.verified !== 'never'
+          ? `<span class="w-vfy" id="${id}">verified ${esc(a.walk.verified)}</span>`
           : `<span class="w-vfy" id="${id}" data-tone="pending">not human-verified</span>`) +
         `</dd>`
     }).join('')).join('')
@@ -882,28 +882,99 @@ function renderRailFlow(page) {
 </details>`
 }
 
+/**
+ * The walk-state strip: three doors a walk can arrive through, and how far each got.
+ *
+ * TWO THINGS THIS IS. It renders the repo's OWN frontmatter, so a standalone build (no arcdoq
+ * anywhere) still shows provenance — this is an MIT package and verification must not become a
+ * subscription feature. And each value sits in a SLOT that a host can substitute live state into at
+ * serve time, because a state baked at build time is wrong the moment anyone walks a guide without
+ * committing, which is the whole problem. The slot contract is arcdoq's `docs/WALK-SLOT-CONTRACT.md`;
+ * a host writes only the element's TEXT and the two `data-walk-*` attribute values, never markup.
+ *
+ * WHY THREE ROWS AND NOT ONE "verified". An agent walk and a human walk are different claims: an
+ * agent proves the instructions are FOLLOWABLE, a person proves IT WORKED FOR A PERSON. One field
+ * lets a scheduled bot silently clear a stale human walk. Separate slots make that structurally
+ * impossible, here and in the substituting host.
+ *
+ * WHY IT NOW RENDERS FOR A HUMAN WALK. It used to return early unless `walked-by-agent` was set, so
+ * a page a person walked — the party that matters — showed no strip at all. The early return was
+ * guarding something real, though: on a RULES page the `verified:` date already rides in each
+ * warrant line, and rendering both duplicates it. So the guard is now about the PAGE GENRE rather
+ * than about one frontmatter key. A narrative (guide / flow) is the thing that gets walked, and on
+ * one of those "nobody has ever walked this" is the single most useful line on the page. Anything
+ * else keeps the old behaviour: strip only if it actually claims a walk.
+ */
+function walkSlot(name, value, tone, proof) {
+  return `<dd data-walk-slot="${name}" data-walk-tone="${tone}" data-walk-proof="${proof}">` +
+    `${value}</dd>`
+}
+
+/**
+ * A frontmatter walk claim → the slot's default cell. Absent/`never` reads as never.
+ *
+ * The state rides `data-walk-tone` ON THE SLOT ELEMENT, never a wrapper inside it. A host
+ * substitutes the element's TEXT, so anything nested is destroyed on substitution — an inner
+ * `<span data-tone="pending">` would take the styling with it and a served "never" would silently
+ * lose its amber. The attribute survives because the host rewrites its value rather than the tag.
+ */
+function claimSlot(name, claim) {
+  const stated = claim && claim !== 'never' ? String(claim) : ''
+  // `claimed`, never `proven`: this value came out of the publisher's own repo, so it is the
+  // publisher attesting to their own verification. A host that can prove a walk overwrites it.
+  return stated
+    ? walkSlot(name, esc(stated), 'walked', 'claimed')
+    : walkSlot(name, 'never', 'never', 'none')
+}
+
+/**
+ * A page's declared walk state, for the machine surface — the same three doors the strip renders.
+ *
+ * Every value is carried VERBATIM, including the literal `never`. Absent is `null` and means "the
+ * key was not written", which is a different fact from "written, and it says nobody walked it".
+ * Collapsing the two was arcdoq-docsite#2's third defect: it left `rules.json` unable to express
+ * the state an attestation is recorded against.
+ *
+ * These are the PUBLISHER'S OWN claims, out of their own repo — self-asserted, exactly like the
+ * `claimed` proof level in the rendered strip. A consumer holding live walk records should prefer
+ * those; this is what the corpus says about itself.
+ */
+function walkStateOf(data) {
+  const val = (v) => (v === undefined || v === null || v === '' ? null : String(v))
+  return {
+    verified: val(data.verified),
+    walkedByAgent: val(data['walked-by-agent']),
+    walkedIn: val(data['walked-in']),
+  }
+}
+
 function renderProvenanceStrip(page, tally) {
   const d = page.data
-  // Only a page that CLAIMS a walk gets the strip. On a rules page the
-  // `verified:` date already rides in the warrant line, and rendering both
-  // duplicates it, which is the drift failure this corpus names three times.
-  if (!d['walked-by-agent']) return ''
+  const narrative = /^(flows|guides)\//.test(page.relPath)
+  const claimsAWalk = Boolean(d['walked-by-agent'] || (d.verified && d.verified !== 'never'))
+  if (!narrative && !claimsAWalk) return ''
+
   const total = Object.values(tally).reduce((a, b) => a + b, 0)
   const fromSource = tally['from-source'] || 0
-  const rows = []
-  // The tone follows the VALUE, not whether the key was written. Keying off the
-  // literal string meant a page that simply omitted `verified:` rendered the
-  // same "never" as plain text, and the key bar — which detects the unverified
-  // state by looking for this span — silently dropped its chip on exactly the
-  // pages least entitled to look verified.
-  const verified = d.verified || 'never'
-  rows.push(['Human-verified', verified === 'never'
-    ? '<span data-tone="pending">never</span>' : esc(verified)])
-  if (d['walked-by-agent']) rows.push(['Agent walk', esc(d['walked-by-agent'])])
-  if (d['walked-in']) rows.push(['Walked in', esc(d['walked-in'])])
-  if (total) rows.push(['Claims', `${total} <span class="pv-split">${fromSource} from source</span>`])
+
+  // `walked-in` belongs to the AGENT claim (which environments it ran against), so it rides inside
+  // that slot's text rather than as a row of its own — a separate row would survive substitution
+  // and keep describing a walk the host had just replaced.
+  const agentClaim = d['walked-by-agent']
+    ? [d['walked-by-agent'], d['walked-in'] ? `in ${d['walked-in']}` : null].filter(Boolean).join(' · ')
+    : ''
+
+  const rows = [
+    ['In a browser', claimSlot('walk-browser', d.verified)],
+    ['By an agent', claimSlot('walk-agent', agentClaim)],
+    // No frontmatter equivalent: a machine walk is something only a host can observe, so the repo
+    // can never claim one. The slot exists so the host has somewhere to put it.
+    ['By a machine', walkSlot('walk-machine', 'never', 'never', 'none')],
+  ]
+  if (total) rows.push(['Claims', `<dd>${total} <span class="pv-split">${fromSource} from source</span></dd>`])
+
   return `<header class="page-provenance"><dl>` +
-    rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('') +
+    rows.map(([k, cell]) => `<div><dt>${k}</dt>${cell.startsWith('<dd') ? cell : `<dd>${cell}</dd>`}</div>`).join('') +
     `</dl></header>`
 }
 
@@ -951,9 +1022,11 @@ function renderPage(page, ctx) {
   const warrantBits = [`<span class="w-kind">${kind}</span>`]
   if (area) warrantBits.push(`<span>${esc(area)}</span>`)
   if (dist) warrantBits.push(`<span class="w-dist">${dist}</span>`)
-  if (page.data.verified && page.data.verified !== 'never') {
-    warrantBits.push(`<span>Verified ${esc(page.data.verified)}</span>`)
-  }
+  // `Verified <date>` used to ride here too. It does not any more: the provenance strip below is
+  // now the ONE home for walk state, and it is substitutable. A second, baked copy in the warrant
+  // would sit next to a live slot showing a different answer — the precise drift the strip exists
+  // to end — and there is no way to substitute this one, because a `<span>` in a `·`-joined run has
+  // no stable identity to address. One fact, one place, and that place is addressable.
 
   // The genre, machine-readable, on a root a content index can actually read:
   // `data-*` is collected off an `<article>`/`<section>` open tag, so `<main>`
@@ -1295,7 +1368,13 @@ for (const p of pages) {
     page: p.relPath,
     title: p.title || p.relPath,
     kind: genreOf(p.relPath),
-    verified: p.data.verified && p.data.verified !== 'never' ? p.data.verified : null,
+    // The narrative's OWN walk state, in the same shape the page renders (schema 3).
+    //
+    // `verified` used to collapse the literal `never` to `null`, which made a page that says
+    // "nobody has ever walked this" indistinguishable from one that says nothing at all — on the
+    // MACHINE surface, where telling those two apart is the entire question an attestation is
+    // written against. `never` is now carried verbatim, and `null` means only "the key was absent".
+    walk: walkStateOf(p.data),
   }
   // The `##` heading is part of its step. The lead is part of no step — it is
   // the page introducing itself before the first `##` — and it is read FIRST,
@@ -1414,17 +1493,18 @@ fs.writeFileSync(path.join(OUT, 'search.html'), shell({
 // is told a rule matches production but never how stale that answer is. Read
 // from the corpus's own sync state, so it stays computed rather than typed.
 fs.writeFileSync(path.join(OUT, 'rules.json'), JSON.stringify({
-  schema: 2, generatedAt: ctx.computedAsOf, name: config.name,
+  schema: 3, generatedAt: ctx.computedAsOf, name: config.name,
   environment: ENVIRONMENT,
   rules: Object.values(ruleIndex).map((r) => ({
     id: r.id, statement: r.statement, page: r.page, anchor: r.anchor,
     status: r.status, tier: r.vocab.tier, origin: r.vocab.origin,
     caveats: r.caveats, tests: r.meta.tests, sources: r.meta.sources,
-    // Additive and always present, empty when nothing narrates the rule, so a
-    // schema 2 reader that ignores unknown keys is unaffected and one that wants
-    // "which rules have a walkthrough" can filter rather than guess. Each entry
-    // carries the narrative's own `verified` state for the same reason the page
-    // does: the machine surface must not imply more than the rendering does.
+    // Always present, empty when nothing narrates the rule, so a caller that wants "which rules
+    // have a walkthrough" can filter rather than guess. Each entry carries the narrative's own walk
+    // state for the same reason the page does: the machine surface must not imply more than the
+    // rendering does. Schema 3 because that state's SHAPE changed — `verified` moved into a `walk`
+    // object and stopped flattening `never` to null, which a schema 2 reader would misread as an
+    // improvement in coverage rather than a change of vocabulary.
     appearsIn: appearsIn[r.id] || [],
   })),
 }, null, 2))
