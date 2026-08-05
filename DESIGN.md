@@ -235,6 +235,61 @@ honest at the cost of moving the coupling into every reader, and it makes
 if the shape is whatever one customer emitted. The package declares a shape; the
 corpus meets it. Anything the file invents beyond that shape is dropped.
 
+### A guide declares itself too, and its steps declare what they cover
+
+A rule announced itself to a content index and a guide announced nothing — not
+that it was a guide, and not which rules stood behind a given step. So an agent
+could ask for rules by id, status or tier, and could not ask *which
+walkthroughs cover this area*, which is the question that decides whether
+opening one is worth the tokens. The genre goes on the page root as `data-kind`;
+the rules a step links down to go on that step's own `<section>` as
+`data-rules`. README states the full shape, because it is a public interface.
+
+Two constraints come from how these are consumed and neither is cosmetic. A
+`data-*` on a descendant is not collected, so an attribute is worth nothing
+unless it sits on the open tag of the block that owns the fact. And multi-value
+has to be whitespace-separated, because HTML cannot repeat an attribute and a
+step usually covers more than one rule — `class` and `rel` already settled that
+convention and inventing a second one would only cost a consumer a parser.
+
+Only guides and flows get a page root. Wrapping a rules page would produce a
+block whose text is every rule on it, duplicating each rule's own `<article>`
+for anything reading both — and that is the structure already being consumed.
+The page warrant and the provenance strip stay outside the root: they are the
+generator describing the document rather than the document's own prose, and the
+strip in particular holds the values a host substitutes at serve time. Baking
+serve-time state inside the block an index harvests is how a search result
+starts quoting a walk that has since been redone.
+
+The rules a step covers and the narratives a rule appears in are one fact read
+from opposite ends, so they are derived from one scan rather than two. That
+scan reads the **rendered page**, not the markdown: matching `](…)` in the
+source counts a rule ID inside a fenced example, and one inside a raw HTML block
+the build drops before it renders. Either way a rule ends up named by a surface
+it appears on nowhere, which is the same overclaim the tier system exists to
+prevent, reached through the machine reader instead of the human one.
+
+**Rejected: putting guide entities in `rules.json`.** It is the obvious place
+and it is the wrong surface. The sidecar is a machine artifact rather than
+prose, and an index derived from HTML excludes it by shape — so guide entries
+there would be a second machine surface the consumer never reads. An earlier
+draft of this proposal targeted it; recorded here so it does not come back.
+
+**Rejected: `data-kind` on `<main>`.** It is the honest page root and it is not
+an `<article>` or a `<section>`, so a content index reading block open tags
+would never see it. An attribute nothing collects is worse than no attribute:
+it reads as a shipped contract.
+
+**Rejected: emitting `data-rules=""` on a step that covers nothing.** Symmetry
+argues for it and consumption argues against: a consumer storing each `data-*`
+as one exact-match facet would file every prose step in the corpus under an
+empty `rules` facet. Absence already answers the question.
+
+**Out of scope on purpose: the page's own `verified:` / `walked-by-agent:` /
+`walked-in:` state.** That is a fact about what someone did after the build, it
+is owned at serve time, and baking it into an attribute now would fix a public
+contract in the wrong place.
+
 ---
 
 ## Provenance
