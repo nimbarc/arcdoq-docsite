@@ -245,6 +245,14 @@ opening one is worth the tokens. The genre goes on the page root as `data-kind`;
 the rules a step links down to go on that step's own `<section>` as
 `data-rules`. README states the full shape, because it is a public interface.
 
+The root carries `data-rules` too, and that is not a rollup for convenience.
+The question is asked at the walkthrough's granularity, not step four's — and
+the lead belongs to no step, so the root is the only block a rule linked from a
+page's introduction can appear on. Measured on the only real guide in
+existence: it links `DEP-002` once, from its lead, and never again. Step-only
+attributes would leave that rule with no `data-rules` anywhere on the site and
+the guide unfindable by an ID it genuinely covers.
+
 Two constraints come from how these are consumed and neither is cosmetic. A
 `data-*` on a descendant is not collected, so an attribute is worth nothing
 unless it sits on the open tag of the block that owns the fact. And multi-value

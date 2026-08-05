@@ -378,12 +378,33 @@ describe('the machine-readable contract on guides and flows', () => {
   })
 
   test('the genre rides on a page root, single-valued and opaque', () => {
-    assert.match(guide, /<article class="page" data-kind="guide">/)
-    assert.match(flow, /<article class="page" data-kind="flow">/)
+    assert.match(guide, /<article class="page" data-kind="guide"/)
+    assert.match(flow, /<article class="page" data-kind="flow"/)
     // Lowercased, and derived from the word the reader is shown rather than
     // written out a second time — so the attribute cannot say "flow" on a page
-    // whose warrant says Guide.
+    // whose warrant says Guide. One word, so it survives being read verbatim by
+    // a consumer that does not tokenise this key.
     assert.match(guide, /<span class="w-kind">Guide<\/span>/)
+    for (const html of [guide, flow]) {
+      assert.ok(!/data-kind="[^"]*\s/.test(html), 'data-kind must never be multi-word')
+    }
+  })
+
+  test('the root carries every rule the page covers, steps and lead alike', () => {
+    // A different question from the one a step answers: *which walkthroughs
+    // cover this?* is asked about the walkthrough. It is also the only place a
+    // rule linked from the lead can appear, since the lead belongs to no step.
+    const root = (html) => /<article class="page"[^>]*data-rules="([^"]*)"/.exec(html)?.[1]
+    assert.equal(root(flow), 'ORD-001 ORD-002 ORD-003 ORD-004')
+    assert.equal(root(guide), 'ORD-004 ORD-002 ORD-003')
+    // The union is exactly the steps' union here, because this fixture links
+    // no rule from a lead. That it is a superset is asserted below.
+    for (const html of [flow, guide]) {
+      const stepIds = new Set(Object.values(steps(html)).filter(Boolean)
+        .flatMap((v) => v.split(' ')))
+      for (const id of stepIds) assert.ok(root(html).split(' ').includes(id),
+        `${id} is on a step and missing from the page root`)
+    }
   })
 
   test('a rules page gains no page root, so the block that already ships is untouched', () => {
@@ -459,19 +480,30 @@ describe('the machine-readable contract on guides and flows', () => {
     }
   })
 
-  test('a rule reached only from the lead names the page back, and no step claims it', () => {
+  test('a rule reached only from the lead reaches the root, and no step claims it', () => {
+    // Measured on the only real guide that exists: it links one rule from its
+    // lead and never again. Step-only attributes would leave that rule with no
+    // `data-rules` anywhere and the guide unfindable by an ID it does cover.
     const r2 = adHoc({
       'docs.json': JSON.stringify({ name: 'x', navigation: { groups: [
         { group: 'Rules', pages: ['rules/a'] },
         { group: 'Guides', pages: ['guides/g'] }] } }),
       'rules/a.md': '---\narea: x\n---\n\n# A\n\n<a id="aaa-001"></a>\n' +
-        '### AAA-001 — A thing is true\n\n**Source:** `core:x.cs`\n',
+        '### AAA-001 — A thing is true\n\n**Source:** `core:x.cs`\n\n' +
+        '<a id="aaa-002"></a>\n### AAA-002 — Another thing\n\n**Source:** `core:y.cs`\n',
       'guides/g.md': '---\nverified: never\n---\n\n# G\n\n' +
         'This guide is about [AAA-001](../rules/a.md#aaa-001).\n\n' +
-        '## A step that covers nothing\n\nPress the button.\n',
+        '## A step that covers nothing\n\nPress the button.\n\n' +
+        '## A step that covers one\n\nSee [AAA-002](../rules/a.md#aaa-002).\n',
     })
+    const html = r2.read('guides-g.html')
     assert.equal(JSON.parse(r2.read('rules.json')).rules[0].appearsIn.length, 1)
-    assert.ok(!r2.read('guides-g.html').includes('data-rules'))
+    // Lead first, because that is where it sits in the document.
+    assert.match(html, /<article class="page" data-kind="guide" data-rules="AAA-001 AAA-002">/)
+    assert.equal(/id="a-step-that-covers-nothing"([^>]*)>/.exec(html)[1], '')
+    assert.match(html, /id="a-step-that-covers-one" data-rules="AAA-002"/)
+    // AAA-001 exists on exactly one block: the root. Nothing invented a step.
+    assert.equal((html.match(/data-rules="[^"]*AAA-001/g) || []).length, 1)
   })
 
   test('a rule a step only prints is not a rule that step covers', () => {

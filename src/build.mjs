@@ -961,12 +961,20 @@ function renderPage(page, ctx) {
   // and the strip in particular holds the values arcdoq substitutes at serve
   // time: baking serve-time state inside the block an index harvests is how a
   // search result starts quoting a walk that has since been redone.
+  //
+  // The root also carries the union of every rule the page links down to, which
+  // is a different question from the one a step answers rather than a rollup
+  // for convenience: *which walkthroughs cover this?* is asked about the
+  // walkthrough. It is also the only place a rule linked from the lead can
+  // appear, since the lead belongs to no step.
   const genre = kind === 'Guide' || kind === 'Flow' ? kind.toLowerCase() : null
+  const root = genre ? `<article class="page" data-kind="${genre}"${
+    page.covers?.length ? ` data-rules="${esc(page.covers.join(' '))}"` : ''}>\n` : ''
 
   return { html: `<div class="page-warrant">${
     warrantBits.join('<span class="w-sep" aria-hidden="true">·</span>')}</div>
 ${renderProvenanceStrip(page, page.tally)}
-${genre ? `<article class="page" data-kind="${genre}">\n` : ''}<h1>${inline(page.title)}</h1>
+${root}<h1>${inline(page.title)}</h1>
 ${page.lead.join('\n')}
 ${ahead}
 ${renderRailFlow(page)}
@@ -1279,16 +1287,22 @@ for (const p of pages) {
     kind: genreOf(p.relPath),
     verified: p.data.verified && p.data.verified !== 'never' ? p.data.verified : null,
   }
-  const onPage = new Set()
   // The `##` heading is part of its step. The lead is part of no step — it is
-  // the page introducing itself before the first `##` — so a rule reached only
-  // from there still names the page back and still carries no `data-rules`
-  // anywhere, because there is no step to put it on.
+  // the page introducing itself before the first `##` — and it is read FIRST,
+  // because that is where it sits in the document.
+  //
+  // The page's own union is why the lead is read at all. Measured on the only
+  // real guide in existence: it links one rule from its lead and never again,
+  // so a step-only attribute leaves that rule with no `data-rules` anywhere and
+  // the page unfindable by the ID it actually covers. The union is also the
+  // granularity the question is asked at — *which walkthroughs cover this?* is
+  // about the walkthrough, not about step four of it.
+  const onPage = new Set(rulesLinkedFrom(p.lead.join('\n'), dir))
   for (const s of p.sections) {
     s.covers = rulesLinkedFrom(inline(s.title) + s.body.join('\n'), dir)
     for (const id of s.covers) onPage.add(id)
   }
-  for (const id of rulesLinkedFrom(p.lead.join('\n'), dir)) onPage.add(id)
+  p.covers = [...onPage]
   // One guide naming a rule at five steps is one appearance, not five.
   for (const id of onPage) (appearsIn[id] ||= []).push(entry)
 }

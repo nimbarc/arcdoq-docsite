@@ -397,6 +397,7 @@ as a habit is one a later change widens without noticing.
 | | `data-tier` | `confirmed` · `unconfirmed` · `broken` · `neutral` |
 | | `data-origin` | `computed` · `asserted` · `none` |
 | `<article class="page">` | `data-kind` | `guide` · `flow` — the page's genre |
+| | `data-rules` | every rule the page links down to |
 | `<section class="prose-group">` | `data-rules` | the rules that step links down to |
 
 Four properties hold across all of it, and each one is asserted by a test:
@@ -415,12 +416,19 @@ Four properties hold across all of it, and each one is asserted by a test:
   `theme`, `cols`, `label` and `tone` are avoided as key names: content indexes
   treat them as presentational and drop them.
 
-`data-kind` is the genre and is single-valued and opaque. Only guides and flows
-carry a page root — a rules page's root would be a block whose text is every
-rule on the page, duplicating each rule's own `<article>` for anything reading
-both. The page warrant and the provenance strip sit outside that root, because
-they are the generator describing the document rather than the document's own
-prose.
+`data-kind` is the genre, single-valued and opaque, and always one word — a
+consumer that stores it verbatim rather than tokenising it still gets a value
+that matches a filter for `guide`. Only guides and flows carry a page root — a
+rules page's root would be a block whose text is every rule on the page,
+duplicating each rule's own `<article>` for anything reading both. The page
+warrant and the provenance strip sit outside that root, because they are the
+generator describing the document rather than the document's own prose.
+
+The root's `data-rules` is not a convenience rollup of its steps'. *Which
+walkthroughs cover this?* is asked about the walkthrough, and the root is the
+only block a rule linked from the page's lead can appear on, because the lead
+belongs to no step. A guide that mentions a rule once, in its introduction,
+would otherwise be unfindable by an ID it genuinely covers.
 
 `data-rules` and `appearsIn` are one fact read from opposite ends — the step
 names the rules it covers, the rule names the narratives that cover it — and
