@@ -167,6 +167,15 @@ const inline = (md) => marked.parseInline(md ?? '')
 const slug = (s) => s.toLowerCase().normalize('NFC')
   .replace(/[^a-z0-9 _-]/g, '').replace(/ /g, '-')
 
+// The page's genre, derived once and read by four surfaces: the warrant's
+// label, the search index's key, the narrative kind a rule names back, and the
+// `data-kind` a content index reads. It was three separate copies of this
+// ternary, which is exactly how a machine attribute ends up disagreeing with
+// the word printed beside it on the same page.
+const genreOf = (rel) => rel.startsWith('rules/') ? 'Rule'
+  : rel.startsWith('flows/') ? 'Flow'
+  : rel.startsWith('guides/') ? 'Guide' : 'Page'
+
 function frontmatter(src) {
   const m = /^---\n([\s\S]*?)\n---\n/.exec(src)
   if (!m) return { data: {}, body: src }
@@ -894,9 +903,7 @@ function renderPage(page, ctx) {
     <span>Behaviour can change at the next promotion, ${unconfirmed.length} of ${page.rules.length}:</span>
     ${unconfirmed.map((r) => `<a href="#${r.anchor}">${esc(r.id)}</a>`).join('')}</p>` : ''
 
-  const kind = page.relPath.startsWith('rules/') ? 'Rule'
-    : page.relPath.startsWith('flows/') ? 'Flow'
-    : page.relPath.startsWith('guides/') ? 'Guide' : 'Page'
+  const kind = genreOf(page.relPath)
   // Keyed on the page's own `area:` frontmatter, which is the corpus's human
   // spelling of an area the nav keys on by directory. Both go through areaKey.
   const area = areaLabel(page.data.area) || page.data.area || ''
@@ -910,8 +917,21 @@ function renderPage(page, ctx) {
 
   // A `##` that groups rules is structural furniture and is set as a label.
   // A `##` on a guide or flow is a content heading and must read as one.
+  //
+  // `data-rules` is the rules this step links down to, on the step's OWN open
+  // tag, because that is the only place a content index reads them from — a
+  // `data-*` on a descendant is not collected. Whitespace-separated, the way
+  // `class` and `rel` already are, since HTML cannot repeat an attribute and a
+  // step usually covers more than one rule. esc() is what keeps a quote out of
+  // the value, which an extractor reading raw HTML would truncate on.
+  //
+  // Omitted rather than emitted empty when a step links to nothing: a consumer
+  // that stores each `data-*` as one exact-match facet would otherwise index
+  // every prose step under an empty `rules` facet. Absence already reads as
+  // "this step covers no rule" and costs nothing to ask about.
   const body = page.sections.map((s) => `<section class="${
-    s.rules.length ? 'rule-group' : 'prose-group'}" id="${s.id}">
+    s.rules.length ? 'rule-group' : 'prose-group'}" id="${s.id}"${
+    s.covers?.length ? ` data-rules="${esc(s.covers.join(' '))}"` : ''}>
     <h2>${inline(s.title)}${s.rules.length
       ? `<span class="sec-range">${s.rules[0].id} to ${s.rules[s.rules.length - 1].id}</span>` : ''}</h2>
     ${s.body.join('\n')}
@@ -925,14 +945,32 @@ function renderPage(page, ctx) {
     warrantBits.push(`<span>Verified ${esc(page.data.verified)}</span>`)
   }
 
+  // The genre, machine-readable, on a root a content index can actually read:
+  // `data-*` is collected off an `<article>`/`<section>` open tag, so `<main>`
+  // — which is neither — could carry it and be ignored. It is the warrant's own
+  // word lowercased rather than a second literal, so the attribute cannot say
+  // "flow" beside a page labelled Guide.
+  //
+  // Only guides and flows are wrapped. A rules page's root would be a block
+  // whose text is every rule on the page, duplicating each rule's own
+  // `<article>` in any index that reads both — and the rules-page structure is
+  // the one already being consumed, so it stays untouched.
+  //
+  // The warrant and the provenance strip stay OUTSIDE it. Both are the
+  // generator talking about the document rather than the document's own prose,
+  // and the strip in particular holds the values arcdoq substitutes at serve
+  // time: baking serve-time state inside the block an index harvests is how a
+  // search result starts quoting a walk that has since been redone.
+  const genre = kind === 'Guide' || kind === 'Flow' ? kind.toLowerCase() : null
+
   return { html: `<div class="page-warrant">${
     warrantBits.join('<span class="w-sep" aria-hidden="true">·</span>')}</div>
 ${renderProvenanceStrip(page, page.tally)}
-<h1>${inline(page.title)}</h1>
+${genre ? `<article class="page" data-kind="${genre}">\n` : ''}<h1>${inline(page.title)}</h1>
 ${page.lead.join('\n')}
 ${ahead}
 ${renderRailFlow(page)}
-${body}` }
+${body}${genre ? '\n</article>' : ''}` }
 }
 
 /* ── the search route ────────────────────────────────────────────────────── */
@@ -957,9 +995,6 @@ ${body}` }
 // a link, so the floor is a browsable index of the site rather than nothing.
 function renderSearchPage(pages, ruleIndex) {
   const titleOf = Object.fromEntries(pages.map((p) => [p.relPath, p.title || p.relPath]))
-  const kindOf = (rel) => rel.startsWith('rules/') ? 'Rule'
-    : rel.startsWith('flows/') ? 'Flow'
-    : rel.startsWith('guides/') ? 'Guide' : 'Page'
 
   // Every row carries the same two slots, so the list scans as one column
   // rather than as two shapes: a key on the left — the ID a reader arrived
@@ -990,10 +1025,10 @@ function renderSearchPage(pages, ruleIndex) {
   }))
 
   const pageRows = pages.map((p) => row({
-    href: htmlName(p.relPath), key: kindOf(p.relPath), tier: null,
+    href: htmlName(p.relPath), key: genreOf(p.relPath), tier: null,
     headline: p.title || p.relPath,
     where: p.relPath,
-    terms: [p.title, p.relPath, p.data.area, kindOf(p.relPath)],
+    terms: [p.title, p.relPath, p.data.area, genreOf(p.relPath)],
   }))
 
   const n = ruleRows.length + pageRows.length
@@ -1184,12 +1219,43 @@ for (const p of pages) {
   }
 }
 
-// A flow or a guide links DOWN to the rules behind its steps, and nothing ran
-// the other way: a reader holding a rule ID could not discover that a
-// walkthrough for it existed. They had to already know the guide was there and
-// read it hunting for their ID. This derives the reverse from links the corpus
-// has already committed — it invents nothing, and a rule nothing narrates gains
-// nothing.
+const anchorToId = {}
+for (const r of Object.values(ruleIndex)) anchorToId[`${r.page}#${r.anchor}`] = r.id
+
+// Which rules a passage links down to, resolved against the linking page's own
+// directory. `../billing/invoices.md#dep-002` from guides/ is a rule ID; the
+// same href matched as a string is not. A link to a rule the site does not
+// publish resolves to nothing, so no surface here can name a rule the reader
+// cannot reach.
+//
+// Read from the RENDERED html rather than the markdown source, for one reason:
+// the machine surface must not imply more than the rendering does. A rule ID
+// inside a fenced example is text, and one inside a raw HTML block is dropped
+// by the build before it renders — matching `](…)` in the source counts both,
+// and a rule then gets named by a surface it appears on nowhere.
+const HTML_RULE_LINK = /href="([^"#]*)#([\w-]+)"/g
+const rulesLinkedFrom = (html, dir) => {
+  const ids = []
+  for (const [, href, anchor] of html.matchAll(HTML_RULE_LINK)) {
+    const id = anchorToId[`${path.posix.normalize(path.posix.join(dir, href))}#${anchor}`]
+    // A passage naming a rule twice covers it once, and the order kept is the
+    // order the reader meets them in — sorting would throw that away.
+    if (id && !ids.includes(id)) ids.push(id)
+  }
+  return ids
+}
+
+// A flow or a guide links DOWN to the rules behind its steps. Both directions
+// of that one fact are published — the step names the rules it covers, the rule
+// names the narratives that contain it — and both are derived HERE, from the
+// same scan, so they cannot disagree. A step carrying a rule that does not
+// carry the step back would be one build contradicting itself across two
+// machine surfaces, which is worse than either surface being absent.
+//
+// The reverse direction is the half that did not exist: a reader holding a rule
+// ID could not discover that a walkthrough for it existed. They had to already
+// know the guide was there and read it hunting for their ID. It invents
+// nothing, and a rule nothing narrates gains nothing.
 //
 // It has to be its own pass. Link resolution runs per page at the END of the
 // render loop, after renderPage has already produced the rule's HTML.
@@ -1201,10 +1267,6 @@ for (const p of pages) {
 // the distinction the per-claim marker system exists to keep. What the rule says
 // is that a narrative exists and how far it has been checked. It never says the
 // rule itself was observed.
-const anchorToId = {}
-for (const r of Object.values(ruleIndex)) anchorToId[`${r.page}#${r.anchor}`] = r.id
-
-const RULE_LINK = /\]\(([^)\s#]*)#([\w-]+)\)/g
 const appearsIn = {}
 for (const p of pages) {
   // A rules page pointing at a rule is a cross-reference between two claims,
@@ -1214,17 +1276,21 @@ for (const p of pages) {
   const entry = {
     page: p.relPath,
     title: p.title || p.relPath,
-    kind: p.relPath.startsWith('flows/') ? 'Flow' : 'Guide',
+    kind: genreOf(p.relPath),
     verified: p.data.verified && p.data.verified !== 'never' ? p.data.verified : null,
   }
-  for (const [, href, anchor] of
-       fs.readFileSync(path.join(CORPUS, p.relPath), 'utf8').matchAll(RULE_LINK)) {
-    const id = anchorToId[`${path.posix.normalize(path.posix.join(dir, href))}#${anchor}`]
-    if (!id) continue
-    const list = (appearsIn[id] ||= [])
-    // One guide naming a rule at five steps is one appearance, not five.
-    if (!list.some((e) => e.page === entry.page)) list.push(entry)
+  const onPage = new Set()
+  // The `##` heading is part of its step. The lead is part of no step — it is
+  // the page introducing itself before the first `##` — so a rule reached only
+  // from there still names the page back and still carries no `data-rules`
+  // anywhere, because there is no step to put it on.
+  for (const s of p.sections) {
+    s.covers = rulesLinkedFrom(inline(s.title) + s.body.join('\n'), dir)
+    for (const id of s.covers) onPage.add(id)
   }
+  for (const id of rulesLinkedFrom(p.lead.join('\n'), dir)) onPage.add(id)
+  // One guide naming a rule at five steps is one appearance, not five.
+  for (const id of onPage) (appearsIn[id] ||= []).push(entry)
 }
 ctx.appearsIn = appearsIn
 

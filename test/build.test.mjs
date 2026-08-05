@@ -354,6 +354,155 @@ describe('the narratives a rule appears in', () => {
   })
 })
 
+// The attribute contract a content index reads. It is public the moment it
+// ships and it is shared with a consumer in another repo, so it is asserted
+// here rather than described: the shape, the separator, the element the
+// attributes sit on, and the names that must never appear. A comment cannot
+// stop the next change from quietly widening any of those.
+//
+// The rules a step covers and the narratives a rule appears in are one fact
+// read from opposite ends, so the last test is the one that matters most: the
+// two surfaces of a single build must not be able to contradict each other.
+describe('the machine-readable contract on guides and flows', () => {
+  let r, flow, guide, rules
+  const openTags = (html) => [...html.matchAll(/<(?:article|section)\b[^>]*>/g)].map((m) => m[0])
+  const steps = (html) => Object.fromEntries(openTags(html)
+    .filter((t) => /class="(?:prose|rule)-group"/.test(t))
+    .map((t) => [/id="([^"]+)"/.exec(t)[1], /data-rules="([^"]*)"/.exec(t)?.[1] ?? null]))
+
+  before(() => {
+    r = run()
+    flow = read(r.out, 'flows-placing-an-order.html')
+    guide = read(r.out, 'guides-refund-an-order.html')
+    rules = read(r.out, 'rules-orders-lifecycle.html')
+  })
+
+  test('the genre rides on a page root, single-valued and opaque', () => {
+    assert.match(guide, /<article class="page" data-kind="guide">/)
+    assert.match(flow, /<article class="page" data-kind="flow">/)
+    // Lowercased, and derived from the word the reader is shown rather than
+    // written out a second time — so the attribute cannot say "flow" on a page
+    // whose warrant says Guide.
+    assert.match(guide, /<span class="w-kind">Guide<\/span>/)
+  })
+
+  test('a rules page gains no page root, so the block that already ships is untouched', () => {
+    // A root wrapping the rules would be a block whose text is every rule on
+    // the page, duplicating each rule's own <article> for anything reading both.
+    assert.ok(!rules.includes('class="page"'))
+    assert.equal(openTags(rules).filter((t) => t.includes('data-kind')).length, 0)
+  })
+
+  test('a step carries the rules it links down to, on its own open tag', () => {
+    // Descendant data-* are not collected. An attribute on the <p> holding the
+    // link, or on the <a> itself, is invisible to the index that needs it.
+    assert.deepEqual(steps(flow)['the-basket-is-submitted'], 'ORD-001')
+    assert.match(flow,
+      /<section class="prose-group" id="the-basket-is-submitted" data-rules="ORD-001">/)
+  })
+
+  test('more than one rule is whitespace-separated, the way class and rel are', () => {
+    // Deduplicated, and in the order the reader meets them — the table names
+    // ORD-003 twice before it reaches ORD-002.
+    assert.equal(steps(flow)['what-can-go-wrong'], 'ORD-003 ORD-002')
+    assert.equal(steps(guide)['if-it-doesnt-work'], 'ORD-002 ORD-003')
+    for (const v of Object.values({ ...steps(flow), ...steps(guide) })) {
+      if (v !== null) assert.ok(!/[,;|]/.test(v), `"${v}" invented a separator`)
+    }
+  })
+
+  test('a step that covers nothing carries no attribute, rather than an empty one', () => {
+    // A consumer that stores each data-* as one exact-match facet would file
+    // every prose step under an empty `rules` facet. Absence already says it.
+    assert.equal(steps(guide)['find-the-order'], null)
+    assert.equal(steps(guide)['what-a-human-still-has-to-check'], null)
+    assert.ok(!guide.includes('data-rules=""'))
+  })
+
+  test('no key is one a consumer drops as presentational, and no value can truncate one', () => {
+    // `copy`, `theme`, `cols`, `label` and `tone` are dropped on arrival. A
+    // quote character truncates the value in an extractor reading raw HTML.
+    const dropped = ['copy', 'theme', 'cols', 'label', 'tone']
+    for (const [file, html] of Object.entries({ flow, guide, rules })) {
+      for (const tag of openTags(html)) {
+        for (const [, key, value] of tag.matchAll(/\bdata-([\w-]+)="([^"]*)"/g)) {
+          assert.equal(key, key.toLowerCase(), `${file}: data-${key} is not lowercased`)
+          assert.ok(!dropped.includes(key), `${file}: data-${key} is dropped as presentational`)
+          assert.ok(!value.includes('"') && !value.includes('&quot;'),
+            `${file}: data-${key} carries a quote`)
+        }
+      }
+    }
+  })
+
+  test('a rule a step covers names that step\'s page back, on both surfaces', () => {
+    // The anti-drift assertion. One build cannot answer "which rules does this
+    // step cover" and "which narratives cover this rule" with different facts.
+    const byId = Object.fromEntries(r.rules.map((x) => [x.id, x]))
+    for (const [page, html] of [['flows/placing-an-order.md', flow],
+                                ['guides/refund-an-order.md', guide]]) {
+      const covered = new Set(Object.values(steps(html))
+        .filter(Boolean).flatMap((v) => v.split(' ')))
+      assert.ok(covered.size, `${page} covers nothing at all`)
+      for (const id of covered) {
+        assert.ok(byId[id], `${page} covers ${id}, which rules.json does not publish`)
+        assert.ok(byId[id].appearsIn.some((a) => a.page === page),
+          `${page} covers ${id} and ${id} does not name ${page} back`)
+      }
+      // And the other direction, which holds because every rule link in this
+      // fixture sits inside a step. A link in the lead belongs to no step, so
+      // it reaches appearsIn with no data-rules anywhere — asserted separately.
+      for (const rule of r.rules) {
+        if (!rule.appearsIn.some((a) => a.page === page)) continue
+        assert.ok(covered.has(rule.id), `${rule.id} names ${page} and no step covers it`)
+      }
+    }
+  })
+
+  test('a rule reached only from the lead names the page back, and no step claims it', () => {
+    const r2 = adHoc({
+      'docs.json': JSON.stringify({ name: 'x', navigation: { groups: [
+        { group: 'Rules', pages: ['rules/a'] },
+        { group: 'Guides', pages: ['guides/g'] }] } }),
+      'rules/a.md': '---\narea: x\n---\n\n# A\n\n<a id="aaa-001"></a>\n' +
+        '### AAA-001 — A thing is true\n\n**Source:** `core:x.cs`\n',
+      'guides/g.md': '---\nverified: never\n---\n\n# G\n\n' +
+        'This guide is about [AAA-001](../rules/a.md#aaa-001).\n\n' +
+        '## A step that covers nothing\n\nPress the button.\n',
+    })
+    assert.equal(JSON.parse(r2.read('rules.json')).rules[0].appearsIn.length, 1)
+    assert.ok(!r2.read('guides-g.html').includes('data-rules'))
+  })
+
+  test('a rule a step only prints is not a rule that step covers', () => {
+    // The link is read out of the rendered page rather than out of the
+    // markdown, and this is what that buys. A rule ID inside a fenced example
+    // is text, and a rule ID inside a raw HTML block is dropped by the build
+    // before it ever renders — the markdown form of this scan counts both, and
+    // then a machine surface names a rule that appears nowhere on the page.
+    const r2 = adHoc({
+      'docs.json': JSON.stringify({ name: 'x', navigation: { groups: [
+        { group: 'Rules', pages: ['rules/a'] },
+        { group: 'Guides', pages: ['guides/g'] }] } }),
+      'rules/a.md': '---\narea: x\n---\n\n# A\n\n<a id="aaa-001"></a>\n' +
+        '### AAA-001 — A thing is true\n\n**Source:** `core:x.cs`\n\n' +
+        '<a id="aaa-002"></a>\n### AAA-002 — Another thing\n\n**Source:** `core:y.cs`\n',
+      'guides/g.md': '---\nverified: never\n---\n\n# G\n\n' +
+        '## Printing a link\n\nWrite it like this:\n\n' +
+        '```\n[AAA-001](../rules/a.md#aaa-001)\n```\n\n' +
+        '<div>Or <a href="../rules/a.md#aaa-001">like this</a>.</div>\n\n' +
+        '## Following a link\n\nSee [AAA-002](../rules/a.md#aaa-002).\n',
+    })
+    const html = r2.read('guides-g.html')
+    assert.equal(/id="printing-a-link"([^>]*)>/.exec(html)[1], '',
+      'neither a fenced example nor a dropped HTML block is a rule the step covers')
+    assert.match(html, /id="following-a-link" data-rules="AAA-002"/)
+    const byId = Object.fromEntries(
+      JSON.parse(r2.read('rules.json')).rules.map((x) => [x.id, x.appearsIn.length]))
+    assert.deepEqual(byId, { 'AAA-001': 0, 'AAA-002': 1 })
+  })
+})
+
 describe('the phone', () => {
   let r, rules, guide
   before(() => {
