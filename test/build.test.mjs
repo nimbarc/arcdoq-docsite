@@ -481,9 +481,10 @@ describe('the machine-readable contract on guides and flows', () => {
   })
 
   test('a rule reached only from the lead reaches the root, and no step claims it', () => {
-    // Measured on the only real guide that exists: it links one rule from its
-    // lead and never again. Step-only attributes would leave that rule with no
-    // `data-rules` anywhere and the guide unfindable by an ID it does cover.
+    // Structural: a guide that names a rule once, in its introduction, has no
+    // step to hang it on. Observed on a real corpus too — one guide linked a
+    // rule from its lead and never again, which step-only attributes would
+    // leave with no `data-rules` anywhere and the guide unfindable by it.
     const r2 = adHoc({
       'docs.json': JSON.stringify({ name: 'x', navigation: { groups: [
         { group: 'Rules', pages: ['rules/a'] },
