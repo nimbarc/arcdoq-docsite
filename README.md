@@ -17,7 +17,7 @@ own:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nimbarc/arcdoq-docsite@v0.6.0
+- uses: nimbarc/arcdoq-docsite@v0.7.0
   with:
     corpus: .
 ```
@@ -31,7 +31,7 @@ Add a token and a slug, and the same step ships the site:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nimbarc/arcdoq-docsite@v0.6.0
+- uses: nimbarc/arcdoq-docsite@v0.7.0
   with:
     corpus: .
     site: docs
@@ -118,7 +118,7 @@ GitHub PAT. That has already happened once, within an hour of a first publish.
 ## Install
 
 ```bash
-npm i -D github:nimbarc/arcdoq-docsite#v0.6.0
+npm i -D github:nimbarc/arcdoq-docsite#v0.7.0
 ```
 
 A git dependency, versioned by tag. No registry and no auth needed. Publishing
@@ -392,7 +392,8 @@ as a habit is one a later change widens without noticing.
 
 | Element | Attribute | Value |
 |---|---|---|
-| `<article class="rule">` | `data-rule-id` | the rule's ID, e.g. `ORD-004` |
+| `<article class="rule">` | `data-kind` | `rule` |
+| | `data-rule-id` | the rule's ID, e.g. `ORD-004` |
 | | `data-status` | the corpus's own status token, unchanged |
 | | `data-tier` | `confirmed` · `unconfirmed` · `broken` · `neutral` |
 | | `data-origin` | `computed` · `asserted` · `none` |
@@ -418,7 +419,12 @@ Four properties hold across all of it, and each one is asserted by a test:
 
 `data-kind` is the genre, single-valued and opaque, and always one word — a
 consumer that stores it verbatim rather than tokenising it still gets a value
-that matches a filter for `guide`. Only guides and flows carry a page root — a
+that matches a filter for `guide`. It is the genre of the **entity**, not of the
+page: a rule declared inside a guide is still `rule`, on a root that is still
+`guide`. Every block that has a genre declares it; none is left to be inferred
+from the presence of another attribute.
+
+Only guides and flows carry a page root — a
 rules page's root would be a block whose text is every rule on the page,
 duplicating each rule's own `<article>` for anything reading both. The page
 warrant and the provenance strip sit outside that root, because they are the

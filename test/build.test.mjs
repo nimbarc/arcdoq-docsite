@@ -385,8 +385,42 @@ describe('the machine-readable contract on guides and flows', () => {
     // whose warrant says Guide. One word, so it survives being read verbatim by
     // a consumer that does not tokenise this key.
     assert.match(guide, /<span class="w-kind">Guide<\/span>/)
-    for (const html of [guide, flow]) {
+    for (const html of [guide, flow, rules]) {
       assert.ok(!/data-kind="[^"]*\s/.test(html), 'data-kind must never be multi-word')
+    }
+  })
+
+  test('a rule declares its genre rather than leaving it to be inferred', () => {
+    // Deducing `rule` from the presence of `data-rule-id` was a consumer reading
+    // a shape, and it worked until the consumer stopped. There is no fallback:
+    // a corpus that does not say so indexes with no genre and the query this
+    // whole surface exists to answer matches nothing.
+    const articles = [...rules.matchAll(/<article class="rule"[^>]*>/g)].map((m) => m[0])
+    assert.equal(articles.length, 4)
+    for (const tag of articles) {
+      assert.match(tag, /data-kind="rule"/)
+      assert.match(tag, /data-rule-id="[A-Z]+-\d+"/)
+    }
+    // The entity's genre, not the page's. A rule keeps it wherever it is declared.
+    const r2 = adHoc({
+      'docs.json': JSON.stringify({ name: 'x', navigation: { groups: [
+        { group: 'Guides', pages: ['guides/g'] }] } }),
+      'guides/g.md': '---\nverified: never\n---\n\n# G\n\n## A step\n\n' +
+        '<a id="aaa-001"></a>\n### AAA-001 — Declared inside a guide\n\n' +
+        '**Source:** `core:x.cs`\n',
+    })
+    const html = r2.read('guides-g.html')
+    assert.match(html, /<article class="page" data-kind="guide"/)
+    assert.match(html, /<article class="rule"[^>]*data-kind="rule"/)
+  })
+
+  test('a rules page puts nothing on a rule-group open tag', () => {
+    // A rule-group's own text is a heading plus an ID range — furniture, and
+    // short enough that a consumer's minimum length usually drops it. Declaring
+    // any data-* there would exempt it from that minimum and turn every one of
+    // them into a chunk of pure furniture carrying facets.
+    for (const tag of [...rules.matchAll(/<section class="rule-group"[^>]*>/g)]) {
+      assert.ok(!/\bdata-/.test(tag[0]), `rule-group carries a data-*: ${tag[0]}`)
     }
   })
 
@@ -409,9 +443,12 @@ describe('the machine-readable contract on guides and flows', () => {
 
   test('a rules page gains no page root, so the block that already ships is untouched', () => {
     // A root wrapping the rules would be a block whose text is every rule on
-    // the page, duplicating each rule's own <article> for anything reading both.
+    // the page. The genre is carried per rule instead, so the only `data-kind`
+    // on a rules page is `rule`, once per rule, and never a page-level one.
     assert.ok(!rules.includes('class="page"'))
-    assert.equal(openTags(rules).filter((t) => t.includes('data-kind')).length, 0)
+    assert.deepEqual(
+      openTags(rules).flatMap((t) => [...t.matchAll(/data-kind="([^"]*)"/g)].map((m) => m[1])),
+      ['rule', 'rule', 'rule', 'rule'])
   })
 
   test('a step carries the rules it links down to, on its own open tag', () => {

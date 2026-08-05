@@ -289,6 +289,22 @@ an `<article>` or a `<section>`, so a content index reading block open tags
 would never see it. An attribute nothing collects is worse than no attribute:
 it reads as a shipped contract.
 
+**Rejected: letting a rule's genre be inferred from `data-rule-id`.** A consumer
+deduced `rule` from the presence of that attribute, and for a while nothing
+needed writing down. That is the whole problem with an inferred contract: it
+holds exactly as long as the inferring side keeps inferring, and neither side
+has a test that fails when it stops. It has stopped, with no fallback — a corpus
+that does not say `rule` indexes with no genre at all, and the query this
+surface exists to answer matches nothing. Every block that has a genre now
+declares it. The value is the entity's, never the page's: a rule declared inside
+a guide is `rule` on a root that is `guide`.
+
+**Do not put `data-*` on a `<section class="rule-group">`.** Its own text is a
+heading plus an ID range — furniture, usually short enough that a consumer's
+minimum chunk length drops it. Declaring an attribute there exempts it from that
+minimum, and every rule group in the corpus becomes an indexed chunk of pure
+furniture carrying real facets. A test asserts it stays bare.
+
 **Rejected: emitting `data-rules=""` on a step that covers nothing.** Symmetry
 argues for it and consumption argues against: a consumer storing each `data-*`
 as one exact-match facet would file every prose step in the corpus under an

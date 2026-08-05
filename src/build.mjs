@@ -814,7 +814,17 @@ function renderRule(rule, ctx) {
   // publishes, so a reader that parses the HTML is never told less than a reader
   // that parses the sidecar. `tier` alone cannot express "changed on stage" once
   // `in-dev` or `unknown` appear — both fold onto `unconfirmed`/`computed`.
-  return `<article class="rule" id="${rule.anchor}" data-rule-id="${rule.id}"
+  //
+  // `data-kind` is DECLARED rather than left to be inferred from the presence of
+  // `data-rule-id`. Inference was never something this side agreed to — it was a
+  // consumer reading a shape and deducing a genre from it, which works right up
+  // until the consumer stops. It has, and there is no fallback: a corpus that
+  // does not say `rule` now indexes with no genre at all, and the one query the
+  // whole surface exists to answer matches nothing. A page states its genre; so
+  // does a rule. It is a literal, not `genreOf`: the genre of the entity, which
+  // stays `rule` even for a rule declared on a guide, not the genre of the page
+  // the entity happens to sit on.
+  return `<article class="rule" id="${rule.anchor}" data-kind="rule" data-rule-id="${rule.id}"
          data-status="${rule.status}" data-tier="${v.tier}" data-origin="${v.origin}">
   <a class="rule-id" href="#${rule.anchor}" data-copy="${rule.id}"
      aria-label="${esc(rule.id)}, permalink">${esc(rule.id)}</a>
