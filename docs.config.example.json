@@ -1,6 +1,9 @@
 {
   "accent": "#5B57E8",
 
+  "//walk": "Let a reader record a walk from the page, without a commit. Adds a one-click Mark walked button under each guide/flow step. OFF by default: the control posts a per-render token only a HOST can mint, so a site served anywhere else ships a button that cannot work. Requires a non-public site — the endpoint refuses public, because a public page is served with no cookie and the write would be open to the internet.",
+  "walk": false,
+
   "refs": {
     "production": "origin/main",
     "candidate": "origin/stage",
