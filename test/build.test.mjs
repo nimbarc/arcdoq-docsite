@@ -888,11 +888,27 @@ describe('the client layer', () => {
       'a fragment that will not decode must not cost the reader the page')
   })
 
-  test('it does not fetch, and never writes a corpus string into innerHTML', () => {
+  test('the ROUTE does not fetch, and never writes a corpus string into innerHTML', () => {
     // The route's whole point. The index arrives baked and escaped by the
     // generator, so there is no request to race and no markup to construct.
+    //
+    // This used to assert that the file fetches NOTHING, which read as a blanket
+    // ban and was enforced as one. It never was: both reasons above are about a
+    // request made ON LOAD, for content the generator already baked. Recording a
+    // walk is neither — it is user-initiated, so there is no page load to race,
+    // and it writes textContent on a button rather than corpus prose into markup.
+    //
+    // So the rule is now stated as what it always protected: no fetch reaches the
+    // search route, and nothing reaches innerHTML. The walk POST is named here
+    // explicitly, so a THIRD request would still have to argue for itself.
     const src = fs.readFileSync(VIEWER, 'utf8')
-    assert.ok(!/fetch\(/.test(src), 'the client layer no longer fetches anything')
+    const fetches = [...src.matchAll(/fetch\(/g)]
+    assert.equal(fetches.length, 1, 'exactly one request in the whole client layer')
+    const walkBlock = /── recording a walk[\s\S]*?\n  \} catch \{[\s\S]*?\n  \}/.exec(src)
+    assert.ok(walkBlock, 'the walk block is still labelled')
+    assert.ok(walkBlock[0].includes('fetch('), 'and it is the one that owns the request')
+    assert.ok(walkBlock[0].includes('form.submit()'),
+      'with the plain-form floor still underneath it')
     assert.ok(!/\.sheet|role="dialog"|aria-modal/.test(src), 'no dialog survives')
     // The search block runs to the end of the file, so everything from its
     // banner down is the route. Comments stripped first: this section explains
@@ -1644,5 +1660,66 @@ describe('packaging', () => {
     for (const name of ['lastProcessedSha', 'aheadOfMain', 'lastRunAt', 'dirtyAtRead', 'orbitalx']) {
       assert.ok(!src.includes(name), `src/build.mjs must not know the identifier "${name}"`)
     }
+  })
+})
+
+// Recording a walk (arcdoq#43). The FIELD NAMES and the token sentinel are a contract with the
+// host that substitutes and receives them, exactly like the slot names — a rename on either side
+// has to fail a build, because the alternative is a button that posts into nothing and a tester
+// who believes they recorded something.
+describe('the walk control', () => {
+  const guide = (walk) => adHoc({
+    'docs.json': JSON.stringify({ name: 'x', navigation: { groups: [
+      { group: 'Guides', pages: ['guides/g'] },
+      { group: 'Rules', pages: ['rules/a'] },
+    ] } }),
+    'guides/g.md': '---\ntitle: G\n---\n\n# G\n\nLead.\n\n## Step one\n\nDo a thing.\n\n' +
+      '## Step two\n\nDo another.\n',
+    'rules/a.md': '---\narea: x\n---\n\n# A\n\n<a id="aaa-001"></a>\n' +
+      '### AAA-001 — A thing is true\n\n**Source:** `core:x.cs`\n',
+  }, { config: walk ? { walk: true } : {} })
+
+  // The default matters more than the feature. The control posts a per-render token only a HOST can
+  // mint, so a plain `npx arcdoq-docsite build` must not ship a button wired to a dead sentinel.
+  test('is OFF by default, and emits nothing at all', () => {
+    const html = guide(false).read('guides-g.html')
+    assert.ok(!html.includes('<form class="walk"'))
+    assert.ok(!html.includes('walk-mark'))
+    assert.ok(!html.includes('@@ARCDOQ_WALK_TOKEN@@'))
+  })
+
+  test('emits ONE form, with the token sentinel the host substitutes', () => {
+    const html = guide(true).read('guides-g.html')
+    assert.equal((html.match(/<form/g) || []).length, 1, 'exactly one form — they cannot nest')
+    assert.equal((html.match(/<\/form>/g) || []).length, 1)
+    assert.match(html, /<form class="walk" method="post" action="__walk\/record">/)
+    assert.match(html, /name="__arcdoq_walk_token" value="@@ARCDOQ_WALK_TOKEN@@"/)
+  })
+
+  // The no-JS story, and the reason there is one form rather than one per step: a submit button's
+  // own name/value pair is what carries the step, so the name is typed once and each mark is a
+  // single click with no script involved.
+  test('gives every step its own submit button carrying that step', () => {
+    const html = guide(true).read('guides-g.html')
+    const frags = [...html.matchAll(/name="__arcdoq_fragment" value="([^"]+)"/g)].map((m) => m[1])
+    assert.deepEqual(frags, ['step-one', 'step-two'])
+    for (const f of frags) {
+      assert.match(html, new RegExp(`<button class="walk-mark" type="submit" name="__arcdoq_fragment" value="${f}"`))
+    }
+    assert.equal((html.match(/name="__arcdoq_name"/g) || []).length, 1, 'one name field for the page')
+  })
+
+  // DESIGN.md's third test, answered the right way round: a 20 KB page of 35 rules gets no buttons,
+  // because a rule is computed from tests and was never the surface being walked.
+  test('never appears on a rules page', () => {
+    const html = guide(true).read('rules-a.html')
+    assert.ok(!html.includes('walk-mark'))
+    assert.ok(!html.includes('<form'))
+  })
+
+  // The name is a label, not evidence, and the markup has to say so where it is typed.
+  test('says on the page that the name proves nothing', () => {
+    const html = guide(true).read('guides-g.html')
+    assert.match(html, /Not verified\. Leave it blank to record anonymously\./)
   })
 })

@@ -214,6 +214,76 @@
     else location.href = 'search.html'
   })
 
+  /* ── recording a walk ──────────────────────────────────────────────────── */
+  // The floor is a real one and stays untouched: the control is a plain <form>
+  // with a submit button per step, so with this whole block deleted a walk still
+  // records — the host answers a plain post with a 303 back to the step. What
+  // this buys is not the capability, it is not losing your place: a tester
+  // marking nine steps should not reload nine times.
+  //
+  // This IS the file's first network call, and the no-fetch assertion next door
+  // was narrowed rather than deleted to allow it. That rule is about the SEARCH
+  // route — "the index arrives baked, so there is no request to race and no
+  // markup to construct" — and neither reason reaches here. This request is
+  // user-initiated, so there is no page load for it to race, and the only thing
+  // it writes is textContent on a button it already owns. What the rule actually
+  // forbids is still forbidden, and still tested.
+  //
+  // Sealed in its own try/catch with its own observable flag. v0.1.0's client
+  // layer threw on every load without a fragment and nothing said so for a whole
+  // version, because everything it powers degrades quietly. The lesson was not
+  // "be careful", it was "make the ceiling's state observable".
+  try {
+    const form = document.querySelector('form.walk')
+    if (form) {
+      const nameInput = form.querySelector('#walk-as')
+      // The name is a label the walker types ONCE, not an identity. Kept locally
+      // so a tester walking twelve guides types it once; it goes nowhere except
+      // to the site's own origin, with the walk it labels.
+      if (nameInput) {
+        const saved = localStorage.getItem('docs-walk-as')
+        if (saved && !nameInput.value) nameInput.value = saved
+        nameInput.addEventListener('change', () => {
+          try { localStorage.setItem('docs-walk-as', nameInput.value.trim()) } catch {}
+        })
+      }
+
+      form.addEventListener('submit', (e) => {
+        const btn = e.submitter
+        if (!btn || !btn.classList.contains('walk-mark') || btn.dataset.walked) return
+        // Only take over when we can send EXACTLY what the browser would have,
+        // submitter included. Older engines return no submitter and throw on the
+        // two-argument FormData; both fall through to the ordinary post.
+        let body
+        try { body = new FormData(form, btn) } catch { return }
+        e.preventDefault()
+        btn.disabled = true
+        fetch(form.getAttribute('action'), {
+          method: 'POST', body, headers: { accept: 'application/json' },
+        })
+          .then((r) => r.json())
+          .then((d) => {
+            if (!d || d.ok !== true) throw new Error('refused')
+            btn.dataset.walked = '1'
+            btn.disabled = false
+            btn.firstChild.nodeValue = 'Walked'
+            const hint = btn.querySelector('.wm-hint')
+            if (hint) hint.textContent = 'just now'
+          })
+          .catch(() => {
+            // Never strand the click. Hand it back to the browser, which posts
+            // for real and lands on the host's own answer — which is the floor,
+            // reached by falling through rather than by being unavailable.
+            btn.disabled = false
+            form.submit()
+          })
+      })
+      root.dataset.walk = 'ready'
+    }
+  } catch {
+    root.dataset.walk = 'failed'
+  }
+
   // The client layer completing is worth one observable fact. It threw on every
   // load without a fragment for the life of v0.1.0 and nothing said so, because
   // everything it powers degrades quietly by design.
