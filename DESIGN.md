@@ -123,6 +123,43 @@ leaving only the distinguishing tail per citation.
 **Rejected: left-truncating source paths.** Truncating a citation is exactly as
 unusable as truncating a route. They wrap.
 
+### The warrant's last row is navigation, and stays per-rule
+
+A guide or flow linking down to a rule earns that rule a row naming it, last in
+the same `<dl>` that carries Test and Source. Last because the evidence backing
+the claim precedes the pages that merely mention it; getting it backwards would
+read as though a narrative were warrant.
+
+Each entry carries **the linking page's own `verified:` state**, never the
+rule's. A guide is `verified: never` until a human walks it, so a bare "walked
+in X" would launder exactly the distinction the per-claim marker system exists
+to keep. The row says a narrative exists and how far it has been checked. It
+never says the rule was observed.
+
+**Rejected: collapsing the repetition when one guide narrates many rules on a
+page.** Measured on the first real corpus — 9 of 20 rules carrying an identical
+row — the repetition costs 2.1% of page height on desktop and 2.7% at 390px,
+where it is the shortest row in the warrant. Against that, every collapse moves
+the fact off the rule the cold reader landed on and onto the page, which trades
+the dominant journey for the one this design de-prioritises. It is also an
+artifact of a corpus having exactly one guide: a second guide covering different
+rules makes the warrants distinct on its own. Source rows and hoisted suites
+already repeat identically down the same page and were never collapsed either.
+
+The axis that does not self-limit is the opposite one — many narratives on a
+single foundational rule, one row per guide, unbounded. Each entry costs 20.6px
+against a 169px claim, so the navigation block reaches the claim's own height at
+eight entries and passes it on the ninth. The answer there is a cap or a fold,
+never a collapse. Not built: no corpus is near it.
+
+Measured on a synthetic twelve-guide corpus, warrant ÷ claim: 1.04 at zero
+entries, 1.53 at four, 2.01 at eight, 2.50 at twelve. Read the first number
+before the last — that rule's warrant **already** exceeds its claim with no
+back-link at all, because it carries three tests. The row does not create the
+inversion and blaming it would be wrong; what it does is take 1.04x to 2.50x,
+and at twelve entries the navigation block alone is 1.46x the claim it hangs
+off.
+
 ### Anchors are hoisted, never generated
 
 If the corpus author wrote an explicit anchor above the heading, that becomes the
@@ -300,8 +337,9 @@ area, and the status distribution. A breadcrumb restates the H1 and the URL.
 
 **No prev/next, in either form.** A reference corpus has no reading order, and
 per-rule adjacency pagers assert continuity across topic boundaries that is not
-there while pointing at a rule already visible one screen down. Linear paging
-stays available behind a flag for corpora that genuinely are books.
+there while pointing at a rule already visible one screen down. A corpus that
+genuinely is a book would want linear paging, and nothing here forecloses it —
+but it is a door left open, not an affordance that exists. See *Deferred*.
 
 **Mobile is a route, not a modal.** Search is a real URL, so the back button
 works and a query is pasteable. There is no dialog, therefore no focus trap to
@@ -572,10 +610,38 @@ anything above it.
   earning their keep in the hundreds.
 - **A provenance lens** that dims non-matching claims. With the minority state
   permanently decorated, its job is mostly done.
+- **Linear paging, behind a flag, for a corpus that genuinely is a book.** No
+  such flag exists: `defaults` declares no key, nothing reads one, and no pager
+  markup is emitted anywhere. Nothing forecloses it either — the shallow config
+  merge preserves unrecognised keys — so this is a door, not a feature. Stated
+  here rather than in the navigation ruling because writing it there in the
+  present tense read as a shipped affordance, which is the overclaim this
+  document's own third question forbids.
+
 - **A build-over-build diff** of what moved since the last publish. The natural
   second release, deferred because it puts a network dependency in the build and
-  has a cold-start case. The artifact keeps the door open at no cost: stable IDs,
-  a schema version, and caveat kinds as an enum rather than free text.
+  has a cold-start case. The artifact keeps most of the door open: stable IDs, a
+  schema version, and caveat kinds as an enum rather than free text.
+
+  **Two hinges are missing, and whoever starts the diff hits both immediately.**
+  Recorded here rather than as defects, because neither binds until that work
+  begins.
+
+  *Artifacts cannot be ordered.* `generatedAt` is deliberately not a build
+  timestamp — `readGeneratedDate` reads the date the corpus states its statuses
+  were computed at, precisely so the clock cannot put a fresh date on a stale
+  answer. So two builds a week apart carry the same `generatedAt`, and a corpus
+  with no `statusSidecar` carries `null`. A diff needs its own ordering field,
+  and it cannot come from the clock either; a content hash over the rule set
+  would order builds without claiming freshness.
+
+  *Caveat kinds are an enum per corpus, not globally.* Only `unpinned` is ours.
+  Every other kind is the customer's own `statusSidecar.groups[].id`, so the enum
+  is customer-declared and mutable. A diff keying on `kind` reports that renaming
+  a group id made every affected rule simultaneously lose one caveat and gain
+  another, with no behaviour having changed — the exact false movement the
+  feature exists to prevent. Either the ids are documented as rename-hostile, or
+  the diff compares on something stabler.
 
 - **Search across every site in a workspace**, served from an index rather than
   baked into a page. This is the one thing a baked index structurally cannot do,
@@ -599,3 +665,46 @@ Run-collapsing of consecutive same-status rules; the status disclosure widget;
 the hover popover; hashed claim IDs; the modal mobile sheet; the sticky rule bar;
 adjacent-rule pagers; left-truncated paths; a link-graph visualisation, which is
 a hero-metric tile in a d3 costume.
+
+---
+
+## Verifying a change to this
+
+Working notes. Each one is here because it produced a wrong answer first.
+
+**Reproducing 390px.** Chrome on macOS will not resize a window below ~606px
+outer width, so a phone viewport is unreachable by resizing. Drive it through a
+same-origin iframe instead — media queries resolve against the iframe's own
+viewport, so it is a real 390px layout. Suppress the classic 15px scrollbar
+(`html { scrollbar-width: none }`) or the layout viewport is 375, not 390. Phones
+use overlay scrollbars, so suppressing it is the faithful choice.
+
+**Measuring contrast needs pixel sampling, not string parsing.**
+`getComputedStyle().color` returns `oklch(...)` here, not `rgb(...)`. Parsing
+those three numbers as RGB produces confident nonsense — it reports ratios near
+1.0 and looks plausible. Paint the colour into a 1×1 canvas over its background
+and read the pixel back. Do the same for anything translucent: reading RGB
+without compositing over the backdrop ignores the alpha entirely.
+
+**Contrast is owed against the surface, not the canvas.** The ink ladder is tuned
+against `--surface-1` because that is the darkest thing text lands on. A value
+checked only against the canvas passes and still fails in the warrant, where
+every citation sits on a fill.
+
+**Measuring "the claim" needs the right two elements.** A rule is `.rule-id`,
+`h3.rule-statement`, `div.rule-body`, `p.rule-trust`, `div.warrant`. The claim is
+the `h3` plus `.rule-body`. `.rule-trust` is the status verdict rendered in the
+margin — counting it inflates the claim by roughly 70% and makes every
+warrant-to-claim ratio look better than it is.
+
+**A deterministic scanner will report the theme's deliberate choices as defects.**
+Metadata at 10–11.5px reads as "tiny text" and the corpus's own prose reads as
+em-dash overuse. Confirm any finding against the rendered DOM before acting on
+it; equally, do not dismiss one because it is inconvenient — the low-contrast
+class it found was real.
+
+**One behaviour change worth knowing.** Hoisting `.rule-id` out of the `<h3>`
+shrank its hit area from 184px — the full mark column, an `<a>` stretched by
+subgrid — to 53.4px, the width of its own text. Visible position is unchanged.
+It is a fix, since 130px of invisible margin used to copy a permalink and fire a
+toast when clicked, but it is a change and it was not asked for.

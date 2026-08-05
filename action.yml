@@ -118,7 +118,14 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: actions/setup-node@v4
+    # v7, not v4: v4 of these actions runs on the node20 runtime, and GitHub now
+    # force-runs those on node24 and annotates every consumer build to say so.
+    # The `node-version` input above is a different thing — it picks the Node the
+    # generator's own scripts run under, and setting it to 22 (v0.4.3) did not
+    # touch the runtime the action's steps execute on, which is what the
+    # annotation actually names. Verified at the pinned tags: both declare
+    # `using: node24`, and every input used here still exists.
+    - uses: actions/setup-node@v7
       with:
         node-version: ${{ inputs.node-version }}
 
@@ -146,7 +153,7 @@ runs:
 
     - name: Upload
       if: ${{ inputs.upload-artifact == 'true' }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: ${{ inputs.artifact-name }}
         path: ${{ inputs.out }}

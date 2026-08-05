@@ -241,22 +241,42 @@ describe('the narratives a rule appears in', () => {
 
   test('a rule names the guide that walks it, and the flow that contains it', () => {
     const warrant = /<article[^>]*data-rule-id="ORD-004"[\s\S]*?<\/article>/.exec(html)[0]
-    assert.match(warrant, /<dt>Guide<\/dt><dd><a class="cite" href="guides-refund-an-order\.html">/)
-    assert.match(warrant, /<dt>Flow<\/dt><dd><a class="cite" href="flows-placing-an-order\.html">/)
+    assert.match(warrant, /<dt>Guide<\/dt><dd><a class="w-nar" href="guides-refund-an-order\.html"/)
+    assert.match(warrant, /<dt>Flow<\/dt><dd><a class="w-nar" href="flows-placing-an-order\.html"/)
     // Evidence first, navigation last: the test and the source that back the
     // claim must precede the pages that merely mention it.
     assert.ok(warrant.indexOf('<dt>Source</dt>') < warrant.indexOf('<dt>Guide</dt>'))
+    // Navigation, not a citation. `.cite` is the monospace class, and monospace
+    // is permitted only on strings that paste into a tool. A guide title pastes
+    // into nothing, and a stack of mono titles reads as more citations.
+    assert.ok(!/<a class="cite" href="(guides|flows)-/.test(warrant))
   })
 
   test("it carries the narrative's own state, so an unwalked guide cannot look walked", () => {
     // This is the overclaim the feature exists to avoid. The guide is
     // `verified: never`; the flow carries a date. Both must say which they are.
-    assert.ok(html.includes(
-      '<a class="cite" href="guides-refund-an-order.html">Refund an order</a>' +
-      '<span class="w-vfy" data-tone="pending">not human-verified</span>'))
-    assert.ok(html.includes(
-      '<a class="cite" href="flows-placing-an-order.html">An order is placed and settled</a>' +
-      '<span class="w-vfy">verified 2031-03-04</span>'))
+    assert.match(html, /guides-refund-an-order\.html"[^>]*>Refund an order<\/a>/)
+    assert.match(html,
+      /<span class="w-vfy" id="[^"]+" data-tone="pending">not human-verified<\/span>/)
+    assert.match(html,
+      /<span class="w-vfy" id="[^"]+">verified 2031-03-04<\/span>/)
+  })
+
+  test('the state reaches the accessibility tree, not only the page', () => {
+    // A links list or rotor reads accessible names and nothing else. Left as a
+    // bare sibling, the state vanishes there and the link announces only
+    // "Refund an order" — the unqualified "walked in X" the standing veto
+    // forbids, reached through the accessibility tree instead of the page.
+    const warrant = /<article[^>]*data-rule-id="ORD-004"[\s\S]*?<\/article>/.exec(html)[0]
+    const link = /<a class="w-nar" href="guides-refund-an-order\.html" aria-describedby="([^"]+)">/
+      .exec(warrant)
+    assert.ok(link, 'the guide link points at its own state')
+    assert.match(warrant, new RegExp(
+      `<span class="w-vfy" id="${link[1]}" data-tone="pending">not human-verified</span>`))
+    // Every id on the page must be unique or the association silently binds to
+    // the first match, which would report one rule's state on another's link.
+    const ids = [...html.matchAll(/<span class="w-vfy" id="([^"]+)"/g)].map((m) => m[1])
+    assert.equal(new Set(ids).size, ids.length)
   })
 
   test('rules.json says the same thing, so the sidecar cannot disagree', () => {
@@ -303,6 +323,34 @@ describe('the narratives a rule appears in', () => {
         'Step three. → [AAA-001](../rules/a.md#aaa-001)\n',
     })
     assert.equal(JSON.parse(r2.read('rules.json')).rules[0].appearsIn.length, 1)
+  })
+
+  test('the term agrees in number with the definitions under it', () => {
+    // Its sibling row already says Test/Tests. One `Guide` labelling three
+    // entries in the same <dl> that pluralises beside it reads as a bug.
+    const r2 = adHoc({
+      'docs.json': JSON.stringify({ name: 'x', navigation: { groups: [
+        { group: 'Rules', pages: ['rules/a'] },
+        { group: 'Guides', pages: ['guides/g1', 'guides/g2'] }] } }),
+      'rules/a.md': '---\narea: x\n---\n\n# A\n\n<a id="aaa-001"></a>\n' +
+        '### AAA-001 — A thing is true\n\n**Source:** `core:x.cs`\n',
+      'guides/g1.md': '---\nverified: never\n---\n\n# G1\n\n' +
+        'Step. → [AAA-001](../rules/a.md#aaa-001)\n',
+      'guides/g2.md': '---\nverified: never\n---\n\n# G2\n\n' +
+        'Step. → [AAA-001](../rules/a.md#aaa-001)\n',
+    })
+    assert.match(r2.read('rules-a.html'), /<dt>Guides<\/dt>/)
+
+    const r1 = adHoc({
+      'docs.json': JSON.stringify({ name: 'x', navigation: { groups: [
+        { group: 'Rules', pages: ['rules/a'] },
+        { group: 'Guides', pages: ['guides/g1'] }] } }),
+      'rules/a.md': '---\narea: x\n---\n\n# A\n\n<a id="aaa-001"></a>\n' +
+        '### AAA-001 — A thing is true\n\n**Source:** `core:x.cs`\n',
+      'guides/g1.md': '---\nverified: never\n---\n\n# G1\n\n' +
+        'Step. → [AAA-001](../rules/a.md#aaa-001)\n',
+    })
+    assert.match(r1.read('rules-a.html'), /<dt>Guide<\/dt>/)
   })
 })
 
@@ -1031,7 +1079,7 @@ describe('the search route', () => {
     }
   })
 
-  test('the two searches DEFECTS.md records as unanswerable now answer', () => {
+  test('the two searches once recorded as unanswerable now answer', () => {
     const rows = [...html.matchAll(/<li data-t="([^"]*)"><a href="([^"]+)"/g)]
     const hits = (q) => rows.filter((m) => m[1].includes(q)).map((m) => m[2])
     // 'inventory' returned nothing on a phone, because an undocumented area
