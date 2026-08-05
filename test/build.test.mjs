@@ -1079,7 +1079,7 @@ describe('the search route', () => {
     }
   })
 
-  test('the two searches DEFECTS.md records as unanswerable now answer', () => {
+  test('the two searches once recorded as unanswerable now answer', () => {
     const rows = [...html.matchAll(/<li data-t="([^"]*)"><a href="([^"]+)"/g)]
     const hits = (q) => rows.filter((m) => m[1].includes(q)).map((m) => m[2])
     // 'inventory' returned nothing on a phone, because an undocumented area
