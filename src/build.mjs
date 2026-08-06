@@ -1036,9 +1036,16 @@ function renderPage(page, ctx) {
   // `name`/`value`. That is what a submit button's name/value pair is FOR, and it
   // buys the entire no-JS story with no script at all: one token, one name field
   // filled once, N buttons, each posting exactly the step it sits under.
+  //
+  // It is also a SLOT. Without that the control is write-only: the "Walked" state is set in the
+  // browser after a post and does not survive a reload, so a tester coming back sees every step
+  // offering to be walked again with no way to tell which already were. It needs no slot NAME of its
+  // own — it identifies itself by the fragment it already carries, so a host fills each button from
+  // the step it posts. A step nobody walked is left exactly as written here.
   const mark = (id) => walkOn
     ? `\n    <button class="walk-mark" type="submit" name="__arcdoq_fragment" value="${esc(id)}"
-      >Mark walked<span class="wm-hint" aria-hidden="true">this step</span></button>`
+      ><span data-walk-slot="step" data-walk-step="${esc(id)}" data-walk-tone="never"
+        >Mark walked</span><span class="wm-hint" aria-hidden="true">this step</span></button>`
     : ''
 
   const body = page.sections.map((s) => `<section class="${

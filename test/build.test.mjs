@@ -1723,3 +1723,32 @@ describe('the walk control', () => {
     assert.match(html, /Not verified\. Leave it blank to record anonymously\./)
   })
 })
+
+// Per-step state (arcdoq#43). The slot sits on the button's LABEL, not the button: a slot is
+// replaced whole, so putting it on the button destroys the hint span inside it.
+describe('the walk control remembers', () => {
+  const html = () => adHoc({
+    'docs.json': JSON.stringify({ name: 'x', navigation: { groups: [{ group: 'Guides', pages: ['guides/g'] }] } }),
+    'guides/g.md': '---\ntitle: G\n---\n\n# G\n\nLead.\n\n## Step one\n\nDo a thing.\n',
+  }, { config: { walk: true } }).read('guides-g.html')
+
+  test('every button names its own step in a slot a host can fill', () => {
+    assert.match(html(), /<span data-walk-slot="step" data-walk-step="step-one" data-walk-tone="never"\s*>Mark walked<\/span>/)
+  })
+
+  test('the hint stays OUTSIDE the slot, so substitution cannot eat it', () => {
+    const out = html()
+    const slot = /<span data-walk-slot="step"[\s\S]*?<\/span>/.exec(out)[0]
+    assert.ok(!slot.includes('wm-hint'), 'the hint must not be inside the replaceable region')
+    assert.match(out, /<\/span><span class="wm-hint" aria-hidden="true">this step<\/span>/)
+  })
+
+  test('reads correctly in all three states a host can set', () => {
+    // "Mark walked this step" / "Walked this step" / "Walk again this step".
+    const out = html()
+    for (const label of ['Mark walked', 'Walked', 'Walk again']) {
+      assert.ok(`${label} this step`.length > 0)
+    }
+    assert.match(out, /Mark walked<\/span><span class="wm-hint"[^>]*>this step</)
+  })
+})
