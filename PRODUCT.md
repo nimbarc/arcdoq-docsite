@@ -39,11 +39,17 @@ to paper for a meeting.
 CI, and never touch the theme. Their whole interface is `docs.json`, frontmatter,
 and a version tag. They should be able to upgrade by bumping one line.
 
-**Third, and newly real: the UAT tester.** They have a passcode and a browser and
-no repo access. They walk a guide to find out whether it still works, and record
-that they did. They are the reason the write path exists (arcdoq#43); before it,
-the only way to record a walk was a commit, which is exactly the barrier they
-cannot cross.
+**Third, and newly real: the UAT tester.** A browser, a minimal seat on the
+workspace, and no repo access. They walk a guide to find out whether it still
+works, and record that they did. They are the reason the write path exists
+(arcdoq#43); before it, the only way to record a walk was a commit, which is
+exactly the barrier they cannot cross.
+
+The seat is not incidental. A walk names a real account or it is not written, so
+this reader is signed in — and the whole design was only reachable once a role
+existed that reads and records and can do nothing else. Handing a contractor an
+account that could delete the workspace was the reason the write path first tried
+to work without one.
 
 **Not users:** end customers, marketing sites, blogs, anyone browsing for pleasure.
 Nothing here is optimised for discovery, engagement, or time-on-page.
@@ -76,9 +82,13 @@ DESIGN.md states it in one line and it governs here too:
 **Never render anything more certain than it is.** This is the one that outranks
 the others, and it is a correctness rule, not a style note. A confidently wrong
 claim is worse than a missing one. It is what vetoes a status chip that flattens a
-caveat, a git-derived "last updated" beside a human verification date, a
-self-asserted name shown like a proven one, and any provenance transform that
-guesses.
+caveat, a git-derived "last updated" beside a human verification date, prose that
+narrates a state something else owns, evidence quietly DEMOTED because a display
+name failed to resolve, and any provenance transform that guesses.
+
+Note the last one runs both ways. Rendering something less certain than it is is
+also a false claim, and a system that quietly downgrades its own strongest
+evidence teaches people to disbelieve the strong case too.
 
 **The reader arrives cold.** No reading order, no prev/next, no tutorial spine, no
 onboarding. Every page is a landing page for the one claim someone linked to.

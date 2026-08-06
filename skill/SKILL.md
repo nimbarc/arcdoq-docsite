@@ -303,7 +303,8 @@ What it adds, on guides and flows only — a rules page gets nothing, because a 
 is computed from tests and was never the surface anyone walks:
 
 - a **Mark walked** button under each step, one click, no JavaScript required
-- a name field, filled once, above the page
+- and on every later render, a step already walked says so — or offers to be
+  walked again, when the words have moved since
 
 **The state stops being a build-time value.** With `walk` on, the provenance strip
 renders your frontmatter into slots a host substitutes live state into. Your

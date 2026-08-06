@@ -319,11 +319,24 @@ shows provenance, and each value sits in a `data-walk-slot` element whose text
 and two `data-walk-*` attributes a host may substitute live state into. The host
 writes strings; this template keeps every tag, class and rule.
 
-Three slots, one per door a walk arrives through — `walk-browser`, `walk-agent`,
-`walk-machine` — because an agent walk and a human walk are different claims: an
-agent proves the instructions are *followable*, a person proves *it worked for a
-person*. One merged field would let a scheduled bot clear a stale human walk;
-separate slots make that impossible rather than merely discouraged.
+Three of them are one per door a walk arrives through — `walk-browser`,
+`walk-agent`, `walk-machine` — because an agent walk and a human walk are
+different claims: an agent proves the instructions are *followable*, a person
+proves *it worked for a person*. One merged field would let a scheduled bot clear
+a stale human walk; separate slots make that impossible rather than merely
+discouraged.
+
+The fourth is per STEP, and it is what stops the control being write-only. Its
+name cannot identify it — there are several on a page — so it names its step in
+`data-walk-step`, and a host fills each from the step it posts: *Walked* when the
+words have not moved, *Walk again* when they have, untouched when nobody walked
+it. Without it a reader who refreshes sees every step offering to be walked again
+with no way to tell which already were, which makes re-confirming cost more than
+the one click it is supposed to.
+
+**It sits on the button's LABEL, not the button**, and that was learned by
+breaking it: a slot is replaced whole, so marking the button destroyed the hint
+span inside it. A slot must be a leaf.
 
 A host that has no record for a door leaves that slot alone. It never writes
 "never" over a claim it simply cannot see — that would turn the publisher's own
