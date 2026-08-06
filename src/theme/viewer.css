@@ -523,28 +523,6 @@ main h3 { font-size: 16.5px; font-weight: 600; letter-spacing: -0.014em; color: 
 
 .walk { display: contents; }
 
-.walk-as {
-  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px;
-  margin: 0 0 26px; font-size: 12.5px; color: var(--ink-3);
-}
-.walk-as label { color: var(--ink-4); font-size: 10.5px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.08em; }
-.walk-as input {
-  flex: 0 1 220px; min-width: 0;
-  background: var(--canvas-top); color: var(--ink);
-  border: 1px solid var(--line); border-radius: var(--radius-sm);
-  padding: 6px 10px; font: 400 13px/1.3 'Hanken Grotesk', sans-serif;
-}
-.walk-as input:focus-visible {
-  outline: 2px solid var(--accent-ring); outline-offset: 1px;
-  border-color: var(--accent);
-}
-.walk-as input::placeholder { color: var(--ink-4); }
-/* Says what the name is worth, next to where it is typed. The host records an
-   unproven name as `claimed` and renders it weaker; promising otherwise here
-   would be the overclaim DESIGN.md treats as a correctness bug, not a style note. */
-.walk-as span { flex: 1 1 100%; color: var(--ink-4); font-size: 11.5px; }
-
 .walk-mark {
   display: inline-flex; align-items: baseline; gap: 7px;
   margin-top: 18px; padding: 6px 12px;

@@ -17,7 +17,7 @@ own:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nimbarc/arcdoq-docsite@v0.10.1
+- uses: nimbarc/arcdoq-docsite@v0.11.0
   with:
     corpus: .
 ```
@@ -31,7 +31,7 @@ Add a token and a slug, and the same step ships the site:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nimbarc/arcdoq-docsite@v0.10.1
+- uses: nimbarc/arcdoq-docsite@v0.11.0
   with:
     corpus: .
     site: docs
@@ -60,20 +60,23 @@ were.
 ```
 
 in `docs.config.json` adds a one-click **Mark walked** button under each step of
-every guide and flow, plus a name field filled once. It works with JavaScript
-off — the form posts and the host sends you back to the step — and with
-JavaScript on nothing reloads at all.
+every guide and flow. It works with JavaScript off — the form posts and the host
+sends you back to the step — and with JavaScript on nothing reloads at all. A step
+you already walked says so on every later render.
+
+Nothing asks the walker who they are: the walk is recorded against their account.
 
 Off by default. The control posts a per-render token only a **host** can mint, so
 a corpus built and served anywhere else would ship a button that can never work.
 
 Two things to know before turning it on:
 
-- **It needs a non-public site.** A walk cannot be recorded on a `public` one:
-  that page is served with no cookie at all, so the write would be open to the
-  internet, and the endpoint refuses it. Deploy `private`, or create it private
-  and set a passcode in the app — a machine deploy cannot create a passcode site,
-  because a passcode does not belong in a workflow file.
+- **It needs a `private` site.** A walk is recorded against the signed-in account
+  that made it, and `private` is the only tier whose readers are signed-in members
+  of the owning org. A `public` page is served with no cookie at all; a `passcode`
+  page is a shared secret, where everyone holding it is the same principal. On
+  either, the buttons render and every one is refused. Invite your walkers as
+  **viewers** — a seat that reads and records and does nothing else.
 - **Your frontmatter becomes the default, not the answer.** `verified:` and
   `walked-by-agent:` still render, still ship in `rules.json`, and are still what
   a standalone build shows. A host holding an observed walk substitutes over
@@ -150,7 +153,7 @@ GitHub PAT. That has already happened once, within an hour of a first publish.
 ## Install
 
 ```bash
-npm i -D github:nimbarc/arcdoq-docsite#v0.10.1
+npm i -D github:nimbarc/arcdoq-docsite#v0.11.0
 ```
 
 A git dependency, versioned by tag. No registry and no auth needed. Publishing

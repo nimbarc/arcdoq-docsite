@@ -1096,21 +1096,19 @@ function renderPage(page, ctx) {
   // the host, which is why the whole thing is opt-in: without a host there is no
   // token and the control could never work.
   //
-  // The name is SELF-ASSERTED and the markup says so rather than implying trust.
-  // A passcode is a shared secret, so everyone holding it is the same principal
-  // and this is a label, not evidence — the host records it as `claimed` and
-  // renders it weaker. Leaving it blank records an anonymous walk, which is still
-  // a true one: it is bound to the version and to the hash of the words walked.
+  // Nothing identifies the walker here, deliberately. A walk is recorded against
+  // the signed-in account that made it — the host reads the id from their session
+  // — so the only thing this form carries is WHICH STEP, plus the per-render token
+  // proving the request came from a real render of this page.
   const walkOpen = walkOn
     ? `<form class="walk" method="post" action="__walk/record">
   <input type="hidden" name="__arcdoq_walk_token" value="@@ARCDOQ_WALK_TOKEN@@">\n`
     : ''
-  const walkName = walkOn
-    ? `<p class="walk-as"><label for="walk-as">Recording as</label>
-  <input id="walk-as" name="__arcdoq_name" type="text" autocomplete="name"
-    placeholder="your name (optional)" maxlength="60">
-  <span>Not verified. Leave it blank to record anonymously.</span></p>\n`
-    : ''
+  // No name field. A walk is recorded against the signed-in account that made it, so there is
+  // nothing for the walker to tell us: the host takes the id from their session and resolves a name
+  // or email from it at read time. The field that used to sit here asked for a string that proved
+  // nothing, on a tier that has since stopped being able to record at all.
+  const walkName = ''
 
   return { html: `<div class="page-warrant">${
     warrantBits.join('<span class="w-sep" aria-hidden="true">·</span>')}</div>
