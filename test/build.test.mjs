@@ -1706,7 +1706,9 @@ describe('the walk control', () => {
     for (const f of frags) {
       assert.match(html, new RegExp(`<button class="walk-mark" type="submit" name="__arcdoq_fragment" value="${f}"`))
     }
-    assert.equal((html.match(/name="__arcdoq_name"/g) || []).length, 1, 'one name field for the page')
+    // No name field at all: a walk is recorded against the signed-in account that made it, so
+    // there is nothing for the walker to supply and nothing that could be typed into a box.
+    assert.ok(!html.includes('__arcdoq_name'), 'nothing asks the walker who they are')
   })
 
   // DESIGN.md's third test, answered the right way round: a 20 KB page of 35 rules gets no buttons,
@@ -1717,10 +1719,13 @@ describe('the walk control', () => {
     assert.ok(!html.includes('<form'))
   })
 
-  // The name is a label, not evidence, and the markup has to say so where it is typed.
-  test('says on the page that the name proves nothing', () => {
+  // There is no anonymous or self-asserted walk left to caveat: the host refuses one without a
+  // signed-in account, so the page carries no identity claim of its own to qualify.
+  test('makes no claim about who walked it', () => {
     const html = guide(true).read('guides-g.html')
-    assert.match(html, /Not verified\. Leave it blank to record anonymously\./)
+    assert.ok(!html.includes('Not verified'))
+    assert.ok(!html.includes('record anonymously'))
+    assert.ok(!html.includes('walk-as'))
   })
 })
 

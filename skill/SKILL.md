@@ -332,15 +332,17 @@ Prose may say what a claim RESTS ON — drafted from source, which branch, what 
 — because none of that changes when somebody walks. It must not assert that nobody has, or that
 anybody has. That is the one fact on the page with a live owner, and two owners is how it drifts.
 
-**Visibility matters, and the wrong choice fails silently.** A walk cannot be
-recorded on a `public` site — the endpoint refuses it, because a public site is
-served with no cookie at all and the write would be open to the internet. The
-buttons still render and every one of them is refused. Publish `private` (walkers
-are signed-in members and get a proven name) or set the site to passcode in the
-app (walkers hold a shared secret, so the name is self-asserted). A machine deploy
-cannot create a passcode site by design — a passcode does not belong in a
-workflow file — so create it `private` and flip it in the app if you want the
-passcode tier; a republish keeps whatever the site already is.
+**It needs a `private` site, and the wrong choice fails silently.** A walk is
+recorded against the signed-in account that made it, so `private` — whose readers
+are members of the owning org — is the only tier that can record one. A `public`
+site is served with no cookie at all; a `passcode` site is a shared secret, where
+everyone holding it is the same principal and no record could name anybody. On
+either, the buttons still render and every one is refused.
+
+So publish `private`, and invite your walkers as **viewers** — a seat that reads
+and records and can do nothing else. There is no anonymous walk and nothing asks a
+walker to type their name: the host takes the id from their session and resolves a
+name, or their email, from it when it renders.
 
 ### Walking a screen
 
