@@ -17,7 +17,7 @@ own:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nimbarc/arcdoq-docsite@v0.10.0
+- uses: nimbarc/arcdoq-docsite@v0.10.1
   with:
     corpus: .
 ```
@@ -31,7 +31,7 @@ Add a token and a slug, and the same step ships the site:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nimbarc/arcdoq-docsite@v0.10.0
+- uses: nimbarc/arcdoq-docsite@v0.10.1
   with:
     corpus: .
     site: docs
@@ -150,7 +150,7 @@ GitHub PAT. That has already happened once, within an hour of a first publish.
 ## Install
 
 ```bash
-npm i -D github:nimbarc/arcdoq-docsite#v0.10.0
+npm i -D github:nimbarc/arcdoq-docsite#v0.10.1
 ```
 
 A git dependency, versioned by tag. No registry and no auth needed. Publishing
