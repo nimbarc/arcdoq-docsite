@@ -316,6 +316,22 @@ So keep writing them exactly as above. A value out of the repo is rendered as a
 CLAIM (weaker, italic) and an observed walk as PROVEN, which is the honest
 difference: your frontmatter is the publisher attesting to their own verification.
 
+**Do not write prose that narrates walk state.** The strip owns it now, and it is live; a sentence
+beside it is baked and is wrong the moment anyone walks. The first real corpus hit this within an
+hour: a page whose aside read *"`verified: never`, and nothing has walked this"* sat directly under a
+strip naming the person who had just walked it.
+
+So write the frontmatter, and let the strip say what it means:
+
+```yaml
+verified: never                  # keep writing these — they are the strip's DEFAULTS
+walked-by-agent: 2031-03-04
+```
+
+Prose may say what a claim RESTS ON — drafted from source, which branch, what source cannot confirm
+— because none of that changes when somebody walks. It must not assert that nobody has, or that
+anybody has. That is the one fact on the page with a live owner, and two owners is how it drifts.
+
 **Visibility matters, and the wrong choice fails silently.** A walk cannot be
 recorded on a `public` site — the endpoint refuses it, because a public site is
 served with no cookie at all and the write would be open to the internet. The
