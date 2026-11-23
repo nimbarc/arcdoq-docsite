@@ -183,6 +183,7 @@ describe('publish — the request arcdoq receives', () => {
 
     const body = JSON.parse(seen.init.body)
     assert.equal(body.site, 'docs')
+    assert.equal(body.docs, true, 'what makes this a docs version on arcdoq')
     assert.deepEqual(body.files.map((f) => f.path).sort(), ['index.html', 'rules.json'])
   })
 

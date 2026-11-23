@@ -186,6 +186,10 @@ export async function publish({
     body: JSON.stringify({
       site,
       files,
+      // What makes this a docs version on arcdoq, the only kind its search indexes. It is said
+      // here on the deploy rather than read off the pages, so no regular page can qualify by what
+      // it contains, and a docs site made only of plain pages still does.
+      docs: true,
       ...(name ? { name } : {}),
       ...(visibility ? { visibility } : {}),
       ...(repo ? { repo } : {}),

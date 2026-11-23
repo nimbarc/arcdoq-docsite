@@ -17,7 +17,7 @@ own:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nimbarc/arcdoq-docsite@v0.11.1
+- uses: nimbarc/arcdoq-docsite@v0.12.0
   with:
     corpus: .
 ```
@@ -31,7 +31,7 @@ Add a token and a slug, and the same step ships the site:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nimbarc/arcdoq-docsite@v0.11.1
+- uses: nimbarc/arcdoq-docsite@v0.12.0
   with:
     corpus: .
     site: docs
@@ -105,6 +105,11 @@ The first run creates the site; every run after updates it. Renaming that site
 in the arcdoq app breaks the link, and the next run will create a new one — so
 don't, or change `site` to match.
 
+**Publishing through this package is what makes a site searchable.** The publish
+step tells arcdoq the version came from this generator, and arcdoq's search covers
+only versions that did. Upload the same files any other way and they are served,
+but not indexed. Needs v0.12.0 or later.
+
 | Input | | |
 |---|---|---|
 | `arcdoq-token` | — | a deploy token, from a secret. Its presence enables publishing |
@@ -153,7 +158,7 @@ GitHub PAT. That has already happened once, within an hour of a first publish.
 ## Install
 
 ```bash
-npm i -D github:nimbarc/arcdoq-docsite#v0.11.1
+npm i -D github:nimbarc/arcdoq-docsite#v0.12.0
 ```
 
 A git dependency, versioned by tag. No registry and no auth needed. Publishing
